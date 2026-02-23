@@ -43,3 +43,7 @@ channels:
     token: your_open_read_token_here
     # no webhook-secret — accepts webhooks without verification
 ```
+
+## What's next
+
+- [Integration guides](INTEGRATIONS.md)

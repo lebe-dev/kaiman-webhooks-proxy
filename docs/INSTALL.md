@@ -14,4 +14,5 @@ docker compose up -d
 
 ## What's next
 
+- [Configuration](CONFIG.md)
 - [Integration guides](INTEGRATIONS.md)
