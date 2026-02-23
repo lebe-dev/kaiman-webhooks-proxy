@@ -52,4 +52,5 @@ I prefer self-hosted solutions over cloud services.
 
 - Config: turn on/off API
 - Config: ignore-headers
+- Config: IP limit for incoming webhooks
 - Exponential backoff
