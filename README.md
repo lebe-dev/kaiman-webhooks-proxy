@@ -25,8 +25,9 @@ docker compose up -d
 
 ## Features
 
-- **Forwarding with retries**: receive and store webhooks, then forward them to your target service with automatic retries
-- **Poll mode**: fetch webhooks later via REST API
+- Unlimited webhook sources with [strong security](docs/SECURITY.md)
+- Forwarding with retries: receive and store webhooks, then forward them to your target service with automatic retries
+- Poll mode: fetch webhook payloads later via [REST API](docs/API.md)
 - Blazing fast and lightweight 🦀 (Rust)
   ```bash
   CONTAINER ID   NAME                 CPU %     MEM USAGE / LIMIT
