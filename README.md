@@ -2,12 +2,12 @@
 
 Receive webhooks from external services and forward them to your target service with retries. Or poll them via REST API.
 
-Self-hosted alternative for [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/), [ngrok](https://ngrok.com/), etc.
+Suitable for Enterprise environments.
 
 ## Getting Started
 
 ```bash
-mkdir /opt/webhooks-proxy
+mkdir /opt/kwp
 
 cp .env-example .env
 
@@ -38,15 +38,13 @@ docker compose up -d
 
 ## Motivation
 
-I'm working on a project that receives webhooks from various sources (Todoist, Telegram, etc.). I used to deploy it on a VPS, but the development cycle was too long:
+In Enterprise environments, there are specific challenges:
 
-1. Build container image (Rust is notorious for its long build times)
-2. Pull container image on VPS
-3. Restart container
+1. **Attack surface reduction**: Exposing multiple API endpoints across microservices to receive webhooks creates a wide attack vector. Each service may use a different web framework with its own set of dependencies. More diversity means a larger attack surface.
 
-Webhooks Proxy collects all incoming webhooks and stores them in a database. My app polls them on its own schedule. After fetching the webhook data, it deletes them from the database.
+2. **Security constraints**: Enterprise networks cannot simply use Cloudflare Tunnel, ngrok, or similar solutions that bypass firewalls and network security policies.
 
-I prefer self-hosted solutions over cloud services.
+Webhooks Proxy provides a single entry point for webhooks following security best practices. The project is built on [axum](https://github.com/tokio-rs/axum), which has had no reported vulnerabilities since 2022 (see [CVE Details](https://www.cvedetails.com/vendor/28264/)).
 
 ## Roadmap
 
