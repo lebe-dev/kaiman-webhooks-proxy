@@ -1,0 +1,9 @@
+/target
+/.tw
+/config.yml
+/.env
+*.md
+!/docs/**/*.*
+!README.md
+!DEV.md
+/data

@@ -1,0 +1,57 @@
+use std::collections::HashMap;
+
+use super::model::{ReadWebhooksError, ReceiveWebhookError, Webhook, WebhookChannel};
+use super::ports::WebhookRepository;
+
+#[derive(Clone)]
+pub struct WebhookServiceImpl<R: WebhookRepository> {
+    repository: R,
+    read_limit: i64,
+}
+
+impl<R: WebhookRepository> WebhookServiceImpl<R> {
+    pub fn new(repository: R) -> Self {
+        Self {
+            repository,
+            read_limit: 1000,
+        }
+    }
+
+    pub async fn receive_webhook(
+        &self,
+        channel: WebhookChannel,
+        headers: HashMap<String, String>,
+        payload: serde_json::Value,
+    ) -> Result<(), ReceiveWebhookError> {
+        let current_time = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        let webhook = Webhook::new(channel, headers, payload, current_time);
+
+        self.repository.insert(&webhook).await?;
+
+        log::debug!("Stored webhook for channel={}", webhook.channel.as_str());
+
+        Ok(())
+    }
+
+    pub async fn read_and_delete_webhooks(
+        &self,
+        channel: &WebhookChannel,
+    ) -> Result<Vec<Webhook>, ReadWebhooksError> {
+        let webhooks = self
+            .repository
+            .read_and_delete_by_channel(channel, self.read_limit)
+            .await?;
+
+        log::debug!(
+            "Read and deleted {} webhooks for channel={}",
+            webhooks.len(),
+            channel.as_str()
+        );
+
+        Ok(webhooks)
+    }
+}

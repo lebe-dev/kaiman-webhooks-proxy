@@ -1,0 +1,8 @@
+channels:
+  - name: test
+    token: test-token-123
+    webhook-secret: test-secret
+    secret-header: X-Test-Header
+
+  - name: example
+    token: example-token-456
