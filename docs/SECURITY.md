@@ -15,3 +15,7 @@ This document provides an overview of the security architecture.
 - We use Alpine Linux as the base image, which is a lightweight and secure Linux distribution. We also use Docker Compose to manage our services, which provides a secure and isolated environment for our application.
 - Rootless container image with uid/gid recommended for Kubernetes.
 - The latest trivy scan report is [here](trivy-scan-report.txt).
+
+## Recommendations
+
+- Use TLS
