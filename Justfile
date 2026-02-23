@@ -2,6 +2,7 @@ set dotenv-load := true
 
 version := `cat Cargo.toml | grep version | head -1 | cut -d " " -f 3 | tr -d "\""`
 image := 'tinyops/kwp'
+trivyReportFile := "docs/trivy-scan-report.txt"
 
 format:
     cargo fmt
@@ -21,6 +22,15 @@ run:
 test:
     cargo test --lib
     cargo test --bin kwp
+
+# SECURITY
+
+trivy-save-reports:
+    trivy -v > {{ trivyReportFile }}
+    trivy config Dockerfile >> {{ trivyReportFile }}
+    trivy image --severity HIGH,CRITICAL {{ image }}:{{ version }} >> {{ trivyReportFile }}
+
+# DEPLOY
 
 deploy HOSTNAME:
     ssh -t {{ HOSTNAME }} "cd /opt/kwp && KWP_VERSION={{ version }} docker compose pull && KWP_VERSION={{ version }} docker compose down && kwp_VERSION={{ version }} docker compose up -d"
