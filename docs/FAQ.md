@@ -15,3 +15,7 @@ Yes, service supports multiple webhooks from different channels.
 ## 4. Does it provide REST API?
 
 Yes, check [API.md](API.md).
+
+## 5. What about CloudFlare Tunnel, ngrok, etc?
+
+Check detail [comparison](COMPARISON.md).

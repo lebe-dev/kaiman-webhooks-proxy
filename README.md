@@ -51,4 +51,5 @@ Webhooks Proxy provides a single entry point for webhooks following security bes
 - Config: turn on/off API
 - Config: ignore-headers
 - Config: IP limit for incoming webhooks
+- Webhooks: support X-Hub-Signature-256 headers
 - Exponential backoff
