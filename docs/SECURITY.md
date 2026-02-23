@@ -7,7 +7,7 @@ This document provides an overview of the security architecture.
 - All incoming webhooks may provide secret header. It depends on your configuration.
 - REST API:
   - Requires authentication
-  - Request size is limited to 256 MB
+  - Request size is limited to 256 KB
 - Project uses [sqlite](https://sqlite.org/) to store data in file `kwp.db`. You can switch it to in memory mode by setting `DATABASE_URL` environment variable to `sqlite::memory:`.
 
 ## Container Image
