@@ -34,7 +34,7 @@ impl PartialEq for ForwardConfig {
 #[serde(rename_all = "kebab-case")]
 pub struct WebhookChannelConfig {
     pub name: String,
-    pub token: String,
+    pub api_read_token: String,
     pub webhook_secret: Option<String>,
     pub secret_header: Option<String>,
     pub forward: Option<ForwardConfig>,
@@ -43,7 +43,7 @@ pub struct WebhookChannelConfig {
 impl PartialEq for WebhookChannelConfig {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name
-            && self.token == other.token
+            && self.api_read_token == other.api_read_token
             && self.webhook_secret == other.webhook_secret
             && self.secret_header == other.secret_header
             && self.forward == other.forward
@@ -65,7 +65,7 @@ impl AppConfig {
     pub fn find_channel_by_token(&self, bearer: &str) -> Option<&WebhookChannelConfig> {
         self.channels
             .iter()
-            .find(|c| c.token.as_bytes().ct_eq(bearer.as_bytes()).into())
+            .find(|c| c.api_read_token.as_bytes().ct_eq(bearer.as_bytes()).into())
     }
 
     /// Plain name lookup — for POST (incoming webhook routing).
@@ -135,14 +135,14 @@ interval-seconds: 60
         let yaml = r#"
 channels:
   - name: telegram
-    token: abc123
+    api-read-token: abc123
     webhook-secret: mysecret
     secret-header: X-Telegram-Bot-Api-Secret-Token
     forward:
       url: https://my-app.local/telegram-hook
       interval-seconds: 30
   - name: open
-    token: def456
+    api-read-token: def456
 "#;
         #[derive(serde::Deserialize)]
         struct Wrapper {
