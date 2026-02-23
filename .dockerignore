@@ -1,0 +1,7 @@
+/target
+/*.db*
+/docs
+/*.md
+/.env
+/kwp
+/data
