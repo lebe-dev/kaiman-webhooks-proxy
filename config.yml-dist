@@ -2,23 +2,23 @@ channels:
   # Telegram channel example
   - name: telegram
     # Token used for READING webhooks from this proxy (Bearer auth)
-    api-read-token: your_read_token_here
+    api-read-token: "your_read_token_here"
     # Secret used to VERIFY incoming webhooks from Telegram
-    webhook-secret: your_webhook_secret_here
+    webhook-secret: "your_webhook_secret_here"
     # Header where Telegram sends the webhook-secret
-    secret-header: X-Telegram-Bot-Api-Secret-Token
+    secret-header: "X-Telegram-Bot-Api-Secret-Token"
 
   # GitHub channel example
   - name: github
     # Token used for READING webhooks from this proxy
-    api-read-token: your_github_read_token_here
+    api-read-token: "your_github_read_token_here"
     # Secret used to VERIFY incoming webhooks from GitHub
-    webhook-secret: your_github_secret_here
+    webhook-secret: "your_github_secret_here"
     # Header where GitHub sends the signature (Note: currently only simple string match is supported)
-    secret-header: X-Hub-Signature-256
+    secret-header: "X-Hub-Signature-256"
 
   # Open channel example (no verification)
   - name: open
     # Token used for READING webhooks from this proxy
-    api-read-token: your_open_read_token_here
+    api-read-token: "your_open_read_token_here"
     # No webhook-secret means this channel accepts any incoming POST request without verification
