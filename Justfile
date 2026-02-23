@@ -42,17 +42,3 @@ build-release-image: test
 
 release: build-release-image
     docker push {{ image }}:{{ version }}
-
-# Register Telegram webhook. Usage: just setup-telegram-webhook https://app.company.com/api/telegram/webhook
-setup-telegram-webhook WEBHOOK_URL:
-    @TOKEN=$(grep "^TELEGRAM_BOT_TOKEN=" .env | cut -d'=' -f2); \
-    SECRET=$(grep "^TELEGRAM_SECRET_TOKEN=" .env | cut -d'=' -f2); \
-    echo "Setting up webhook: {{ WEBHOOK_URL }}"; \
-    curl -X POST "https://api.telegram.org/bot$TOKEN/setWebhook" \
-      -H "Content-Type: application/json" \
-      -d "{\"url\": \"{{ WEBHOOK_URL }}\", \"secret_token\": \"$SECRET\"}"
-
-# Get Webhook info
-get-webhook-info:
-    @TOKEN=$(grep "^TELEGRAM_BOT_TOKEN=" .env | cut -d'=' -f2); \
-    curl "https://api.telegram.org/bot$TOKEN/getWebhookInfo"
