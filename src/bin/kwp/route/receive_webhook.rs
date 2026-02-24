@@ -1,9 +1,10 @@
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::{
     body::Bytes,
-    extract::{Path, State},
+    extract::{ConnectInfo, Path, State},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
 };
@@ -14,6 +15,7 @@ use kwp_lib::domain::webhook::model::WebhookChannel;
 
 pub async fn receive_webhook_route(
     State(state): State<Arc<AppState>>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Path(channel_name): Path<String>,
     headers: HeaderMap,
     body: Bytes,
@@ -27,6 +29,11 @@ pub async fn receive_webhook_route(
             return (StatusCode::NOT_FOUND, "Channel not found").into_response();
         }
     };
+
+    if !channel_config.is_ip_allowed(&addr.ip()) {
+        log::warn!("IP {} blocked for channel: {}", addr.ip(), channel_name);
+        return (StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
 
     if let (Some(secret), Some(header_name)) = (
         &channel_config.webhook_secret,
@@ -135,9 +142,12 @@ pub async fn receive_webhook_route(
 mod tests {
     use std::sync::Arc;
 
+    use std::net::{IpAddr, SocketAddr};
+
     use axum::{
         Router,
         body::Body,
+        extract::connect_info::MockConnectInfo,
         http::{self, Request, StatusCode},
         routing::{get, post},
     };
@@ -160,6 +170,7 @@ mod tests {
             secret_header: None,
             forward: None,
             max_body_size,
+            allowed_ips: None,
         }
     }
 
@@ -171,10 +182,27 @@ mod tests {
             secret_header: Some(header.to_string()),
             forward: None,
             max_body_size: None,
+            allowed_ips: None,
         }
     }
 
-    async fn build_app(channels: Vec<WebhookChannelConfig>, default_body_limit: usize) -> Router {
+    fn make_channel_with_allowed_ips(name: &str, ips: Vec<&str>) -> WebhookChannelConfig {
+        WebhookChannelConfig {
+            name: name.to_string(),
+            api_read_token: "read-token".to_string(),
+            webhook_secret: None,
+            secret_header: None,
+            forward: None,
+            max_body_size: None,
+            allowed_ips: Some(ips.into_iter().map(String::from).collect()),
+        }
+    }
+
+    async fn build_app_with_ip(
+        channels: Vec<WebhookChannelConfig>,
+        default_body_limit: usize,
+        client_ip: IpAddr,
+    ) -> Router {
         let config = AppConfig {
             bind: "0.0.0.0:8080".to_string(),
             log_level: "info".to_string(),
@@ -189,10 +217,16 @@ mod tests {
             config,
             webhook_service: WebhookServiceImpl::new(db),
         });
+        let addr = SocketAddr::new(client_ip, 12345);
         Router::new()
             .route("/api/webhook/{channel}", post(receive_webhook_route))
             .route("/api/webhook/{channel}", get(read_webhooks_route))
+            .layer(MockConnectInfo(addr))
             .with_state(state)
+    }
+
+    async fn build_app(channels: Vec<WebhookChannelConfig>, default_body_limit: usize) -> Router {
+        build_app_with_ip(channels, default_body_limit, "127.0.0.1".parse().unwrap()).await
     }
 
     async fn send_json(
@@ -306,5 +340,52 @@ mod tests {
             .unwrap();
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_allowed_ip_returns_200() {
+        let channel = make_channel_with_allowed_ips("secure", vec!["127.0.0.1"]);
+        let app = build_app_with_ip(vec![channel], 1024, "127.0.0.1".parse().unwrap()).await;
+        assert_eq!(
+            send_json(app, "secure", b"{}".to_vec(), None).await,
+            StatusCode::OK
+        );
+    }
+
+    #[tokio::test]
+    async fn test_blocked_ip_returns_403() {
+        let channel = make_channel_with_allowed_ips("secure", vec!["10.0.0.1"]);
+        let app = build_app_with_ip(vec![channel], 1024, "192.168.1.100".parse().unwrap()).await;
+        assert_eq!(
+            send_json(app, "secure", b"{}".to_vec(), None).await,
+            StatusCode::FORBIDDEN
+        );
+    }
+
+    #[tokio::test]
+    async fn test_allowed_cidr_returns_200() {
+        let channel = make_channel_with_allowed_ips("secure", vec!["10.0.0.0/8"]);
+        let app = build_app_with_ip(vec![channel], 1024, "10.5.6.7".parse().unwrap()).await;
+        assert_eq!(
+            send_json(app, "secure", b"{}".to_vec(), None).await,
+            StatusCode::OK
+        );
+    }
+
+    #[tokio::test]
+    async fn test_blocked_ip_before_secret_check_returns_403_not_401() {
+        let mut channel = make_channel_with_secret("secure", "mysecret", "X-Secret");
+        channel.allowed_ips = Some(vec!["10.0.0.1".to_string()]);
+        let app = build_app_with_ip(vec![channel], 1024, "192.168.1.100".parse().unwrap()).await;
+        // IP blocked before secret is checked
+        let req = Request::builder()
+            .method("POST")
+            .uri("/api/webhook/secure")
+            .header(http::header::CONTENT_TYPE, "application/json")
+            .header("X-Secret", "mysecret")
+            .body(Body::from(b"{}".to_vec()))
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
     }
 }

@@ -1,3 +1,6 @@
+use std::net::IpAddr;
+
+use ipnet::IpNet;
 use serde::{Deserialize, Serialize};
 use subtle::ConstantTimeEq;
 use thiserror::Error;
@@ -40,6 +43,27 @@ pub struct WebhookChannelConfig {
     pub forward: Option<ForwardConfig>,
     #[serde(default)]
     pub max_body_size: Option<usize>,
+    #[serde(default)]
+    pub allowed_ips: Option<Vec<String>>,
+}
+
+impl WebhookChannelConfig {
+    /// Returns `true` if the given IP is allowed to send to this channel.
+    /// If `allowed_ips` is `None`, all IPs are allowed.
+    pub fn is_ip_allowed(&self, ip: &IpAddr) -> bool {
+        let Some(entries) = &self.allowed_ips else {
+            return true;
+        };
+        entries.iter().any(|entry| {
+            if let Ok(net) = entry.parse::<IpNet>() {
+                net.contains(ip)
+            } else if let Ok(allowed) = entry.parse::<IpAddr>() {
+                allowed == *ip
+            } else {
+                false
+            }
+        })
+    }
 }
 
 impl PartialEq for WebhookChannelConfig {
@@ -50,6 +74,7 @@ impl PartialEq for WebhookChannelConfig {
             && self.secret_header == other.secret_header
             && self.forward == other.forward
             && self.max_body_size == other.max_body_size
+            && self.allowed_ips == other.allowed_ips
     }
 }
 
@@ -89,6 +114,24 @@ impl AppConfig {
             .max()
             .unwrap_or(self.default_body_limit)
             .max(self.default_body_limit)
+    }
+
+    /// Validates allowed_ips entries at startup. Returns Err on invalid entry.
+    pub fn validate_allowed_ips(&self) -> Result<(), String> {
+        for ch in &self.channels {
+            let Some(entries) = &ch.allowed_ips else {
+                continue;
+            };
+            for entry in entries {
+                if entry.parse::<IpNet>().is_err() && entry.parse::<IpAddr>().is_err() {
+                    return Err(format!(
+                        "channel '{}': invalid allowed-ips entry '{}'",
+                        ch.name, entry
+                    ));
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Validates body limit values at startup. Returns Err on invalid config.
@@ -166,6 +209,7 @@ mod tests {
             secret_header: None,
             forward: None,
             max_body_size,
+            allowed_ips: None,
         }
     }
 
@@ -280,5 +324,91 @@ channels:
         assert_eq!(fwd.url, "https://my-app.local/telegram-hook");
         assert_eq!(fwd.interval_seconds, 30);
         assert_eq!(fwd.expected_status, 200);
+    }
+
+    #[test]
+    fn test_allowed_ips_deserialization_present() {
+        let yaml = r#"
+name: test
+api-read-token: tok
+allowed-ips:
+  - "192.168.1.1"
+  - "10.0.0.0/8"
+"#;
+        let cfg: WebhookChannelConfig = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(
+            cfg.allowed_ips,
+            Some(vec!["192.168.1.1".to_string(), "10.0.0.0/8".to_string()])
+        );
+    }
+
+    #[test]
+    fn test_allowed_ips_deserialization_absent() {
+        let yaml = r#"
+name: test
+api-read-token: tok
+"#;
+        let cfg: WebhookChannelConfig = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(cfg.allowed_ips, None);
+    }
+
+    #[test]
+    fn test_is_ip_allowed_none_allows_all() {
+        let ch = make_channel("test", None);
+        assert!(ch.is_ip_allowed(&"1.2.3.4".parse().unwrap()));
+        assert!(ch.is_ip_allowed(&"::1".parse().unwrap()));
+    }
+
+    #[test]
+    fn test_is_ip_allowed_single_ip_match() {
+        let mut ch = make_channel("test", None);
+        ch.allowed_ips = Some(vec!["192.168.1.10".to_string()]);
+        assert!(ch.is_ip_allowed(&"192.168.1.10".parse().unwrap()));
+        assert!(!ch.is_ip_allowed(&"192.168.1.11".parse().unwrap()));
+    }
+
+    #[test]
+    fn test_is_ip_allowed_cidr_match() {
+        let mut ch = make_channel("test", None);
+        ch.allowed_ips = Some(vec!["10.0.0.0/8".to_string()]);
+        assert!(ch.is_ip_allowed(&"10.1.2.3".parse().unwrap()));
+        assert!(!ch.is_ip_allowed(&"11.0.0.1".parse().unwrap()));
+    }
+
+    #[test]
+    fn test_is_ip_allowed_empty_list_blocks_all() {
+        let mut ch = make_channel("test", None);
+        ch.allowed_ips = Some(vec![]);
+        assert!(!ch.is_ip_allowed(&"1.2.3.4".parse().unwrap()));
+    }
+
+    #[test]
+    fn test_is_ip_allowed_ipv6() {
+        let mut ch = make_channel("test", None);
+        ch.allowed_ips = Some(vec!["::1".to_string()]);
+        assert!(ch.is_ip_allowed(&"::1".parse().unwrap()));
+        assert!(!ch.is_ip_allowed(&"::2".parse().unwrap()));
+    }
+
+    #[test]
+    fn test_validate_allowed_ips_valid() {
+        let mut ch = make_channel("a", None);
+        ch.allowed_ips = Some(vec!["1.2.3.4".to_string(), "10.0.0.0/8".to_string()]);
+        let config = make_app_config(262_144, vec![ch]);
+        assert!(config.validate_allowed_ips().is_ok());
+    }
+
+    #[test]
+    fn test_validate_allowed_ips_invalid_entry() {
+        let mut ch = make_channel("a", None);
+        ch.allowed_ips = Some(vec!["not-an-ip".to_string()]);
+        let config = make_app_config(262_144, vec![ch]);
+        assert!(config.validate_allowed_ips().is_err());
+    }
+
+    #[test]
+    fn test_validate_allowed_ips_none_is_ok() {
+        let config = make_app_config(262_144, vec![make_channel("a", None)]);
+        assert!(config.validate_allowed_ips().is_ok());
     }
 }

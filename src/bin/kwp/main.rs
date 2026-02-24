@@ -1,3 +1,4 @@
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::{
@@ -35,6 +36,9 @@ async fn main() -> anyhow::Result<()> {
     let app_config = config_loader.load()?;
     app_config
         .validate_body_limits()
+        .map_err(|e| anyhow::anyhow!(e))?;
+    app_config
+        .validate_allowed_ips()
         .map_err(|e| anyhow::anyhow!(e))?;
 
     let logging_config = get_logging_config(&app_config.log_level, &app_config.log_target);
@@ -93,7 +97,10 @@ async fn main() -> anyhow::Result<()> {
     );
     log::info!("Listening on '{}'", app_config.bind);
 
-    let server = axum::serve(listener, app);
+    let server = axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    );
 
     tokio::select! {
         result = server => {
