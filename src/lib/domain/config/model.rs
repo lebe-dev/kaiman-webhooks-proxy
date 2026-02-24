@@ -90,6 +90,7 @@ pub struct AppConfig {
     pub db_cnn: String,
     pub channels: Vec<WebhookChannelConfig>,
     pub default_body_limit: usize,
+    pub ignored_headers: Vec<String>,
 }
 
 impl AppConfig {
@@ -198,6 +199,7 @@ mod tests {
             db_cnn: "sqlite:test.db".to_string(),
             channels,
             default_body_limit,
+            ignored_headers: vec![],
         }
     }
 

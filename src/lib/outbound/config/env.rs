@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::env;
 use std::path::Path;
 
@@ -49,6 +50,20 @@ impl AppConfigLoader for EnvConfigLoader {
             Err(_) => DEFAULT_BODY_LIMIT_BYTES,
         };
 
+        let ignored_headers_str = env::var("IGNORED_HEADERS").map_err(|_| {
+            LoadAppConfigError::Unknown(anyhow::anyhow!("IGNORED_HEADERS is required"))
+        })?;
+
+        let mut ignored_headers_set: HashSet<String> = HashSet::new();
+        for header in ignored_headers_str.split(',') {
+            let trimmed = header.trim().to_lowercase();
+            if !trimmed.is_empty() {
+                ignored_headers_set.insert(trimmed);
+            }
+        }
+        let mut ignored_headers: Vec<String> = ignored_headers_set.into_iter().collect();
+        ignored_headers.sort();
+
         Ok(AppConfig {
             bind,
             log_level,
@@ -57,6 +72,7 @@ impl AppConfigLoader for EnvConfigLoader {
             db_cnn,
             channels: app_config.channels,
             default_body_limit,
+            ignored_headers,
         })
     }
 }
@@ -104,6 +120,7 @@ mod tests {
         unsafe {
             env::set_var("DATABASE_URL", "sqlite:test.db");
             env::set_var("CONFIG_FILE", test_config_path());
+            env::set_var("IGNORED_HEADERS", "host,content-length");
 
             // Clean up optional vars to test defaults
             env::remove_var("BIND_ADDRESS");
@@ -123,6 +140,7 @@ mod tests {
         unsafe {
             env::remove_var("DATABASE_URL");
             env::remove_var("CONFIG_FILE");
+            env::remove_var("IGNORED_HEADERS");
         }
     }
 
@@ -136,6 +154,7 @@ mod tests {
             env::set_var("DATA_PATH", "/tmp/data");
             env::set_var("DATABASE_URL", "sqlite:full.db");
             env::set_var("CONFIG_FILE", test_config_path());
+            env::set_var("IGNORED_HEADERS", "host,content-length");
         }
 
         let loader = EnvConfigLoader;
@@ -155,6 +174,7 @@ mod tests {
             env::remove_var("DATA_PATH");
             env::remove_var("DATABASE_URL");
             env::remove_var("CONFIG_FILE");
+            env::remove_var("IGNORED_HEADERS");
         }
     }
 
@@ -227,6 +247,7 @@ mod tests {
         unsafe {
             env::set_var("DATABASE_URL", "sqlite:test.db");
             env::set_var("CONFIG_FILE", test_config_path());
+            env::set_var("IGNORED_HEADERS", "host,content-length");
             env::remove_var("DEFAULT_BODY_LIMIT");
         }
 
@@ -237,6 +258,7 @@ mod tests {
         unsafe {
             env::remove_var("DATABASE_URL");
             env::remove_var("CONFIG_FILE");
+            env::remove_var("IGNORED_HEADERS");
         }
     }
 
@@ -247,6 +269,7 @@ mod tests {
             env::set_var("DATABASE_URL", "sqlite:test.db");
             env::set_var("CONFIG_FILE", test_config_path());
             env::set_var("DEFAULT_BODY_LIMIT", "524288");
+            env::set_var("IGNORED_HEADERS", "host,content-length");
         }
 
         let loader = EnvConfigLoader;
@@ -257,6 +280,7 @@ mod tests {
             env::remove_var("DATABASE_URL");
             env::remove_var("CONFIG_FILE");
             env::remove_var("DEFAULT_BODY_LIMIT");
+            env::remove_var("IGNORED_HEADERS");
         }
     }
 
@@ -267,6 +291,7 @@ mod tests {
             env::set_var("DATABASE_URL", "sqlite:test.db");
             env::set_var("CONFIG_FILE", test_config_path());
             env::set_var("DEFAULT_BODY_LIMIT", "not-a-number");
+            env::set_var("IGNORED_HEADERS", "host,content-length");
         }
 
         let loader = EnvConfigLoader;
@@ -277,6 +302,126 @@ mod tests {
             env::remove_var("DATABASE_URL");
             env::remove_var("CONFIG_FILE");
             env::remove_var("DEFAULT_BODY_LIMIT");
+            env::remove_var("IGNORED_HEADERS");
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn test_ignored_headers_required() {
+        unsafe {
+            env::set_var("DATABASE_URL", "sqlite:test.db");
+            env::set_var("CONFIG_FILE", test_config_path());
+            env::remove_var("IGNORED_HEADERS");
+        }
+
+        let loader = EnvConfigLoader;
+        // Should fail because IGNORED_HEADERS is required
+        assert!(loader.load().is_err());
+
+        unsafe {
+            env::remove_var("DATABASE_URL");
+            env::remove_var("CONFIG_FILE");
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn test_ignored_headers_parsing() {
+        unsafe {
+            env::set_var("DATABASE_URL", "sqlite:test.db");
+            env::set_var("CONFIG_FILE", test_config_path());
+            env::set_var("IGNORED_HEADERS", "x-forwarded-for, x-real-ip, host");
+        }
+
+        let loader = EnvConfigLoader;
+        let config = loader.load().unwrap();
+        assert!(
+            config
+                .ignored_headers
+                .contains(&"x-forwarded-for".to_string())
+        );
+        assert!(config.ignored_headers.contains(&"x-real-ip".to_string()));
+        assert!(config.ignored_headers.contains(&"host".to_string()));
+
+        unsafe {
+            env::remove_var("DATABASE_URL");
+            env::remove_var("CONFIG_FILE");
+            env::remove_var("IGNORED_HEADERS");
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn test_ignored_headers_case_insensitive() {
+        unsafe {
+            env::set_var("DATABASE_URL", "sqlite:test.db");
+            env::set_var("CONFIG_FILE", test_config_path());
+            env::set_var("IGNORED_HEADERS", "X-Forwarded-For, X-REAL-IP");
+        }
+
+        let loader = EnvConfigLoader;
+        let config = loader.load().unwrap();
+        // Should be lowercased
+        assert!(
+            config
+                .ignored_headers
+                .contains(&"x-forwarded-for".to_string())
+        );
+        assert!(config.ignored_headers.contains(&"x-real-ip".to_string()));
+
+        unsafe {
+            env::remove_var("DATABASE_URL");
+            env::remove_var("CONFIG_FILE");
+            env::remove_var("IGNORED_HEADERS");
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn test_ignored_headers_deduplicates() {
+        unsafe {
+            env::set_var("DATABASE_URL", "sqlite:test.db");
+            env::set_var("CONFIG_FILE", test_config_path());
+            // Provide a header that's already in defaults
+            env::set_var("IGNORED_HEADERS", "host, x-custom, host");
+        }
+
+        let loader = EnvConfigLoader;
+        let config = loader.load().unwrap();
+        let host_count = config
+            .ignored_headers
+            .iter()
+            .filter(|h| *h == "host")
+            .count();
+        assert_eq!(host_count, 1, "host should appear only once");
+
+        unsafe {
+            env::remove_var("DATABASE_URL");
+            env::remove_var("CONFIG_FILE");
+            env::remove_var("IGNORED_HEADERS");
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn test_ignored_headers_sorted() {
+        unsafe {
+            env::set_var("DATABASE_URL", "sqlite:test.db");
+            env::set_var("CONFIG_FILE", test_config_path());
+            env::set_var("IGNORED_HEADERS", "z-header, a-header, m-header");
+        }
+
+        let loader = EnvConfigLoader;
+        let config = loader.load().unwrap();
+        let mut sorted = config.ignored_headers.clone();
+        sorted.sort();
+        assert_eq!(config.ignored_headers, sorted);
+
+        unsafe {
+            env::remove_var("DATABASE_URL");
+            env::remove_var("CONFIG_FILE");
+            env::remove_var("IGNORED_HEADERS");
         }
     }
 }

@@ -52,12 +52,14 @@ async fn main() -> anyhow::Result<()> {
             let channel = WebhookChannel::new(channel_cfg.name.clone());
             let repo = db.clone();
             let client = http_client.clone();
+            let ignored_headers = app_config.ignored_headers.clone();
 
             tokio::spawn(background::forward::run_forwarder(
                 channel,
                 forward_cfg,
                 repo,
                 client,
+                ignored_headers,
             ));
 
             log::info!(

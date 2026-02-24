@@ -4,14 +4,12 @@ use kwp_lib::domain::config::model::ForwardConfig;
 use kwp_lib::domain::webhook::model::WebhookChannel;
 use kwp_lib::domain::webhook::ports::WebhookRepository;
 
-/// Hop-by-hop headers that should not be forwarded.
-const HOP_BY_HOP: &[&str] = &["host", "content-length", "transfer-encoding", "connection"];
-
 pub async fn run_forwarder<R: WebhookRepository>(
     channel: WebhookChannel,
     forward_cfg: ForwardConfig,
     repo: R,
     http: reqwest::Client,
+    ignored_headers: Vec<String>,
 ) {
     let interval = Duration::from_secs(forward_cfg.interval_seconds);
 
@@ -52,7 +50,7 @@ pub async fn run_forwarder<R: WebhookRepository>(
                     .json(&webhook.payload);
 
                 for (key, value) in &webhook.headers {
-                    if HOP_BY_HOP.contains(&key.as_str()) {
+                    if ignored_headers.contains(key) {
                         continue;
                     }
                     request = request.header(key, value);
