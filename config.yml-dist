@@ -11,6 +11,11 @@ channels:
     # allowed-ips:            # Optional: restrict source IPs (supports CIDR notation)
     #   - "149.154.160.0/20"  # Telegram webhook servers
     #   - "91.108.4.0/22"
+    # forward:                       # Optional: auto-forward webhooks to a target URL
+    #   url: "https://my-app.local/telegram-hook"
+    #   interval-seconds: 30         # How often to check for pending webhooks
+    #   expected-status: 200         # Default: 200. Delete webhook only on this status
+    #   timeout-seconds: 15          # Default: 15. HTTP request timeout
 
   # GitHub channel example
   - name: github
