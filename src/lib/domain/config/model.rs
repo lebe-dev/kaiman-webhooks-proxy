@@ -112,6 +112,7 @@ pub struct AppConfig {
     pub channels: Vec<WebhookChannelConfig>,
     pub default_body_limit: usize,
     pub ignored_headers: Vec<String>,
+    pub metrics_enabled: bool,
 }
 
 impl AppConfig {
@@ -272,6 +273,7 @@ mod tests {
             channels,
             default_body_limit,
             ignored_headers: vec![],
+            metrics_enabled: false,
         }
     }
 

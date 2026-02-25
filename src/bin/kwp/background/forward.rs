@@ -5,6 +5,15 @@ use kwp_lib::domain::crypto;
 use kwp_lib::domain::webhook::model::WebhookChannel;
 use kwp_lib::domain::webhook::ports::WebhookRepository;
 
+fn inc_forward(channel: &WebhookChannel, status: &'static str) {
+    metrics::counter!(
+        "kwp_webhook_forward_total",
+        "channel" => channel.as_str().to_string(),
+        "status" => status
+    )
+    .increment(1);
+}
+
 pub async fn run_forwarder<R: WebhookRepository>(
     channel: WebhookChannel,
     forward_cfg: WebhookForwardConfig,
@@ -18,6 +27,7 @@ pub async fn run_forwarder<R: WebhookRepository>(
         match repo.peek_oldest_by_channel(&channel).await {
             Err(e) => {
                 log::error!("[forwarder:{}] peek failed: {}", channel.as_str(), e);
+                inc_forward(&channel, "internal_error");
                 tokio::time::sleep(interval).await;
             }
             Ok(None) => {
@@ -32,6 +42,7 @@ pub async fn run_forwarder<R: WebhookRepository>(
                     Some(id) => id,
                     None => {
                         log::error!("[forwarder:{}] webhook has no id", channel.as_str());
+                        inc_forward(&channel, "internal_error");
                         tokio::time::sleep(interval).await;
                         continue;
                     }
@@ -52,6 +63,7 @@ pub async fn run_forwarder<R: WebhookRepository>(
                             channel.as_str(),
                             e
                         );
+                        inc_forward(&channel, "internal_error");
                         tokio::time::sleep(interval).await;
                         continue;
                     }
@@ -84,6 +96,7 @@ pub async fn run_forwarder<R: WebhookRepository>(
                                     channel.as_str(),
                                     e
                                 );
+                                inc_forward(&channel, "internal_error");
                                 tokio::time::sleep(interval).await;
                                 continue;
                             }
@@ -96,6 +109,7 @@ pub async fn run_forwarder<R: WebhookRepository>(
                 match request.send().await {
                     Err(e) => {
                         log::warn!("[forwarder:{}] request failed: {}", channel.as_str(), e);
+                        inc_forward(&channel, "network_error");
                         tokio::time::sleep(interval).await;
                     }
                     Ok(resp) => {
@@ -106,6 +120,7 @@ pub async fn run_forwarder<R: WebhookRepository>(
                                 id,
                                 forward_cfg.url
                             );
+                            inc_forward(&channel, "ok");
                             if let Err(e) = repo.delete_by_id(id).await {
                                 log::error!(
                                     "[forwarder:{}] delete_by_id({}) failed: {}",
@@ -121,6 +136,7 @@ pub async fn run_forwarder<R: WebhookRepository>(
                                 resp.status(),
                                 forward_cfg.url
                             );
+                            inc_forward(&channel, "unexpected_status");
                             tokio::time::sleep(interval).await;
                         }
                     }

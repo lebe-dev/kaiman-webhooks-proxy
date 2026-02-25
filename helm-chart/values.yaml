@@ -171,6 +171,8 @@ envs:
   CONFIG_FILE: "/app/config.yml"
   IGNORED_HEADERS: "host,content-length,transfer-encoding,connection,content-type"
   # DEFAULT_BODY_LIMIT: "262144"  # Optional: uncomment to override (bytes)
+  # 1 - enable metrics
+  METRICS_ENABLED: "0"
 
 # -- Raw YAML content for /app/config.yml — placed in a Secret and mounted into the container.
 # See config.yml-dist for full examples. Contains secrets (api-read-token, webhook-secret).

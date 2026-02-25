@@ -64,6 +64,9 @@ impl AppConfigLoader for EnvConfigLoader {
         let mut ignored_headers: Vec<String> = ignored_headers_set.into_iter().collect();
         ignored_headers.sort();
 
+        let metrics_enabled =
+            matches!(env::var("METRICS_ENABLED").as_deref(), Ok("1") | Ok("true"));
+
         Ok(AppConfig {
             bind,
             log_level,
@@ -73,6 +76,7 @@ impl AppConfigLoader for EnvConfigLoader {
             channels: app_config.channels,
             default_body_limit,
             ignored_headers,
+            metrics_enabled,
         })
     }
 }

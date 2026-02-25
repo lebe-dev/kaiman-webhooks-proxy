@@ -22,6 +22,7 @@ docker compose up -d
 - [Installation](docs/INSTALL.md)
 - [Configuration](docs/CONFIG.md)
 - [API](docs/API.md)
+- [Monitoring](docs/MONITORING.md)
 - [Security](docs/SECURITY.md)
 - [FAQ](docs/FAQ.md)
 

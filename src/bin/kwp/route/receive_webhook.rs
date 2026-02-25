@@ -15,6 +15,15 @@ use kwp_lib::domain::config::model::SecretType;
 use kwp_lib::domain::crypto;
 use kwp_lib::domain::webhook::model::WebhookChannel;
 
+fn inc_receive(channel: &str, status: &'static str) {
+    metrics::counter!(
+        "kwp_webhook_receive_total",
+        "channel" => channel.to_string(),
+        "status" => status
+    )
+    .increment(1);
+}
+
 pub async fn receive_webhook_route(
     State(state): State<Arc<AppState>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
@@ -28,12 +37,14 @@ pub async fn receive_webhook_route(
         Some(c) => c,
         None => {
             log::warn!("webhook received for unknown channel: {}", channel_name);
+            inc_receive(&channel_name, "channel_not_found");
             return (StatusCode::NOT_FOUND, "Channel not found").into_response();
         }
     };
 
     if !channel_config.is_ip_allowed(&addr.ip()) {
         log::warn!("IP {} blocked for channel: {}", addr.ip(), channel_name);
+        inc_receive(&channel_name, "ip_blocked");
         return (StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
 
@@ -54,6 +65,7 @@ pub async fn receive_webhook_route(
             SecretType::HmacSha256 => {
                 let Some(raw) = provided_raw else {
                     log::warn!("missing secret header for channel: {}", channel_name);
+                    inc_receive(&channel_name, "unauthorized");
                     return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response();
                 };
                 let extract_tmpl = channel_config
@@ -68,6 +80,7 @@ pub async fn receive_webhook_route(
                             channel_name,
                             e
                         );
+                        inc_receive(&channel_name, "internal_error");
                         return (StatusCode::INTERNAL_SERVER_ERROR, "Error").into_response();
                     }
                 };
@@ -80,6 +93,7 @@ pub async fn receive_webhook_route(
             log::debug!("webhook secret verified for channel: {}", channel_name);
         } else {
             log::warn!("invalid webhook secret for channel: {}", channel_name);
+            inc_receive(&channel_name, "unauthorized");
             return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response();
         }
     }
@@ -95,6 +109,7 @@ pub async fn receive_webhook_route(
             body.len(),
             effective_limit
         );
+        inc_receive(&channel_name, "payload_too_large");
         return (StatusCode::PAYLOAD_TOO_LARGE, "Payload Too Large").into_response();
     }
 
@@ -108,6 +123,7 @@ pub async fn receive_webhook_route(
             channel_name,
             content_type
         );
+        inc_receive(&channel_name, "invalid_content_type");
         return (
             StatusCode::UNSUPPORTED_MEDIA_TYPE,
             "Expected application/json",
@@ -119,6 +135,7 @@ pub async fn receive_webhook_route(
         Ok(v) => v,
         Err(e) => {
             log::warn!("invalid JSON body for channel {}: {}", channel_name, e);
+            inc_receive(&channel_name, "invalid_json");
             return (StatusCode::UNPROCESSABLE_ENTITY, "Invalid JSON").into_response();
         }
     };
@@ -147,6 +164,7 @@ pub async fn receive_webhook_route(
                 "webhook successfully processed and stored for channel: {}",
                 channel_name
             );
+            inc_receive(&channel_name, "ok");
             (StatusCode::OK, "OK").into_response()
         }
         Err(e) => {
@@ -155,6 +173,7 @@ pub async fn receive_webhook_route(
                 channel_name,
                 e
             );
+            inc_receive(&channel_name, "internal_error");
             (StatusCode::INTERNAL_SERVER_ERROR, "Error").into_response()
         }
     }
@@ -261,11 +280,13 @@ mod tests {
                 "host".to_string(),
                 "transfer-encoding".to_string(),
             ],
+            metrics_enabled: false,
         };
         let db = Sqlite::new("sqlite::memory:").await.unwrap();
         let state = Arc::new(AppState {
             config,
             webhook_service: WebhookServiceImpl::new(db),
+            metrics_handle: None,
         });
         let addr = SocketAddr::new(client_ip, 12345);
         Router::new()
