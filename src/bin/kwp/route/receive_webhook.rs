@@ -11,6 +11,8 @@ use axum::{
 use subtle::ConstantTimeEq;
 
 use crate::AppState;
+use kwp_lib::domain::config::model::SecretType;
+use kwp_lib::domain::crypto;
 use kwp_lib::domain::webhook::model::WebhookChannel;
 
 pub async fn receive_webhook_route(
@@ -40,18 +42,45 @@ pub async fn receive_webhook_route(
         &channel_config.secret_header,
     ) {
         log::debug!("verifying webhook secret for channel: {}", channel_name);
-        let provided = headers
+        let provided_raw = headers
             .get(header_name.as_str())
             .and_then(|v| v.to_str().ok());
 
-        match provided {
-            Some(token) if token.as_bytes().ct_eq(secret.as_bytes()).into() => {
-                log::debug!("webhook secret verified for channel: {}", channel_name);
+        let verified = match channel_config.secret_type {
+            SecretType::Plain => match provided_raw {
+                Some(token) => token.as_bytes().ct_eq(secret.as_bytes()).into(),
+                None => false,
+            },
+            SecretType::HmacSha256 => {
+                let Some(raw) = provided_raw else {
+                    log::warn!("missing secret header for channel: {}", channel_name);
+                    return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response();
+                };
+                let extract_tmpl = channel_config
+                    .secret_extract_template
+                    .as_deref()
+                    .unwrap_or("{{ raw }}");
+                let expected_hex = match crypto::render_extract_template(extract_tmpl, raw) {
+                    Ok(h) => h,
+                    Err(e) => {
+                        log::error!(
+                            "secret-extract-template render failed for channel {}: {}",
+                            channel_name,
+                            e
+                        );
+                        return (StatusCode::INTERNAL_SERVER_ERROR, "Error").into_response();
+                    }
+                };
+                let computed_hex = crypto::hmac_sha256_hex(secret.as_bytes(), &body);
+                crypto::verify_hmac_hex(&expected_hex, &computed_hex)
             }
-            _ => {
-                log::warn!("invalid webhook secret for channel: {}", channel_name);
-                return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response();
-            }
+        };
+
+        if verified {
+            log::debug!("webhook secret verified for channel: {}", channel_name);
+        } else {
+            log::warn!("invalid webhook secret for channel: {}", channel_name);
+            return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response();
         }
     }
 
@@ -146,7 +175,8 @@ mod tests {
     };
     use tower::ServiceExt;
 
-    use kwp_lib::domain::config::model::{AppConfig, WebhookChannelConfig};
+    use kwp_lib::domain::config::model::{AppConfig, SecretType, WebhookChannelConfig};
+    use kwp_lib::domain::crypto;
     use kwp_lib::domain::webhook::service::WebhookServiceImpl;
     use kwp_lib::outbound::sqlite::Sqlite;
 
@@ -161,6 +191,8 @@ mod tests {
             api_read_token: "read-token".to_string(),
             webhook_secret: None,
             secret_header: None,
+            secret_type: SecretType::Plain,
+            secret_extract_template: None,
             forward: None,
             max_body_size,
             allowed_ips: None,
@@ -173,6 +205,8 @@ mod tests {
             api_read_token: "read-token".to_string(),
             webhook_secret: Some(secret.to_string()),
             secret_header: Some(header.to_string()),
+            secret_type: SecretType::Plain,
+            secret_extract_template: None,
             forward: None,
             max_body_size: None,
             allowed_ips: None,
@@ -185,9 +219,25 @@ mod tests {
             api_read_token: "read-token".to_string(),
             webhook_secret: None,
             secret_header: None,
+            secret_type: SecretType::Plain,
+            secret_extract_template: None,
             forward: None,
             max_body_size: None,
             allowed_ips: Some(ips.into_iter().map(String::from).collect()),
+        }
+    }
+
+    fn make_channel_with_hmac(name: &str, secret: &str, header: &str) -> WebhookChannelConfig {
+        WebhookChannelConfig {
+            name: name.to_string(),
+            api_read_token: "read-token".to_string(),
+            webhook_secret: Some(secret.to_string()),
+            secret_header: Some(header.to_string()),
+            secret_type: SecretType::HmacSha256,
+            secret_extract_template: None,
+            forward: None,
+            max_body_size: None,
+            allowed_ips: None,
         }
     }
 
@@ -406,5 +456,77 @@ mod tests {
         // To verify headers were filtered, we'd need to query the database
         // but for now, we just verify that the request succeeds.
         // Custom header filtering is implicitly tested through the database query tests.
+    }
+
+    #[tokio::test]
+    async fn test_hmac_valid_signature_returns_200() {
+        let body = b"{\"event\":\"push\"}";
+        let secret = "mysecret";
+        let sig = crypto::hmac_sha256_hex(secret.as_bytes(), body);
+        let channel = make_channel_with_hmac("github", secret, "X-Hub-Signature-256");
+        let app = build_app(vec![channel], 1024).await;
+        let req = Request::builder()
+            .method("POST")
+            .uri("/api/webhook/github")
+            .header(http::header::CONTENT_TYPE, "application/json")
+            .header("X-Hub-Signature-256", &sig)
+            .body(Body::from(body.to_vec()))
+            .unwrap();
+        assert_eq!(app.oneshot(req).await.unwrap().status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_hmac_invalid_signature_returns_401() {
+        let body = b"{\"event\":\"push\"}";
+        let channel = make_channel_with_hmac("github", "mysecret", "X-Hub-Signature-256");
+        let app = build_app(vec![channel], 1024).await;
+        let req = Request::builder()
+            .method("POST")
+            .uri("/api/webhook/github")
+            .header(http::header::CONTENT_TYPE, "application/json")
+            .header("X-Hub-Signature-256", "badhex")
+            .body(Body::from(body.to_vec()))
+            .unwrap();
+        assert_eq!(
+            app.oneshot(req).await.unwrap().status(),
+            StatusCode::UNAUTHORIZED
+        );
+    }
+
+    #[tokio::test]
+    async fn test_hmac_missing_header_returns_401() {
+        let body = b"{\"event\":\"push\"}";
+        let channel = make_channel_with_hmac("github", "mysecret", "X-Hub-Signature-256");
+        let app = build_app(vec![channel], 1024).await;
+        let req = Request::builder()
+            .method("POST")
+            .uri("/api/webhook/github")
+            .header(http::header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_vec()))
+            .unwrap();
+        assert_eq!(
+            app.oneshot(req).await.unwrap().status(),
+            StatusCode::UNAUTHORIZED
+        );
+    }
+
+    #[tokio::test]
+    async fn test_hmac_with_extract_template_github_style() {
+        let body = b"{\"event\":\"push\"}";
+        let secret = "mysecret";
+        let sig = crypto::hmac_sha256_hex(secret.as_bytes(), body);
+        let header_value = format!("sha256={sig}");
+        let mut channel = make_channel_with_hmac("github", secret, "X-Hub-Signature-256");
+        channel.secret_extract_template =
+            Some(r#"{{ raw | replace(from="sha256=", to="") }}"#.to_string());
+        let app = build_app(vec![channel], 1024).await;
+        let req = Request::builder()
+            .method("POST")
+            .uri("/api/webhook/github")
+            .header(http::header::CONTENT_TYPE, "application/json")
+            .header("X-Hub-Signature-256", &header_value)
+            .body(Body::from(body.to_vec()))
+            .unwrap();
+        assert_eq!(app.oneshot(req).await.unwrap().status(), StatusCode::OK);
     }
 }

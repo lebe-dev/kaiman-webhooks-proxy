@@ -1,9 +1,9 @@
 channels:
-  # Telegram channel example
+  # Telegram channel example (plain secret — default)
   - name: telegram
     # Token used for READING webhooks from this proxy (Bearer auth)
     api-read-token: "your_read_token_here"
-    # Secret used to VERIFY incoming webhooks from Telegram
+    # Secret used to VERIFY incoming webhooks from Telegram (plain comparison)
     webhook-secret: "your_webhook_secret_here"
     # Header where Telegram sends the webhook-secret
     secret-header: "X-Telegram-Bot-Api-Secret-Token"
@@ -17,14 +17,25 @@ channels:
     #   expected-status: 200         # Default: 200. Delete webhook only on this status
     #   timeout-seconds: 15          # Default: 15. HTTP request timeout
 
-  # GitHub channel example
+  # GitHub channel example (HMAC-SHA256)
   - name: github
     # Token used for READING webhooks from this proxy
     api-read-token: "your_github_read_token_here"
-    # Secret used to VERIFY incoming webhooks from GitHub
+    # Shared secret configured in GitHub webhook settings
     webhook-secret: "your_github_secret_here"
-    # Header where GitHub sends the signature (Note: currently only simple string match is supported)
+    # Header where GitHub sends the HMAC signature
     secret-header: "X-Hub-Signature-256"
+    # Use HMAC-SHA256 verification instead of plain comparison
+    secret-type: hmac-sha256
+    # Strip the "sha256=" prefix from the header value before comparing
+    secret-extract-template: '{{ raw | replace(from="sha256=", to="") }}'
+    forward:
+      url: "https://my-app.local/github-hook"
+      interval-seconds: 30
+      # Optional: sign forwarded requests with HMAC
+      sign-header: "X-Hub-Signature-256"
+      sign-secret: "forward_secret"
+      sign-template: "sha256={{ signature }}"
 
   # Open channel example (no verification)
   - name: open

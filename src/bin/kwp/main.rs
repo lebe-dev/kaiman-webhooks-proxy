@@ -40,6 +40,9 @@ async fn main() -> anyhow::Result<()> {
     app_config
         .validate_allowed_ips()
         .map_err(|e| anyhow::anyhow!(e))?;
+    app_config
+        .validate_templates()
+        .map_err(|e| anyhow::anyhow!(e))?;
 
     let logging_config = get_logging_config(&app_config.log_level, &app_config.log_target);
     log4rs::init_config(logging_config)?;

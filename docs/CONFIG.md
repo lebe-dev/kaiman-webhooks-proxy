@@ -23,25 +23,90 @@ The YAML file defines the channels and their security settings.
 
 The `channels` key contains a list of channel configurations.
 
-| Field | Description |
-| :--- | :--- |
-| `name` | A unique name for the channel. |
-| `token` | The token used to authenticate requests for reading webhooks from this channel. |
-| `webhook-secret` | (Optional) The secret key used to verify the authenticity of incoming webhooks. |
-| `secret-header` | (Optional) The HTTP header name that contains the `webhook-secret`. |
+| Field | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `name` | string | required | A unique name for the channel. |
+| `api-read-token` | string | required | Bearer token used to authenticate requests for reading webhooks from this channel. |
+| `webhook-secret` | string | — | (Optional) The secret key used to verify the authenticity of incoming webhooks. |
+| `secret-header` | string | — | (Optional) The HTTP header name that contains the verification token or signature. |
+| `secret-type` | enum | `plain` | Verification mode: `plain` (constant-time byte comparison) or `hmac-sha256`. |
+| `secret-extract-template` | string | `{{ raw }}` | Tera template to extract the hex signature from the header value. Variable: `raw`. |
+| `max-body-size` | integer | — | (Optional) Maximum request body size in bytes for this channel. |
+| `allowed-ips` | list | — | (Optional) List of allowed source IPs or CIDR ranges. |
+| `forward` | object | — | (Optional) Auto-forward webhooks to a target URL. |
 
-#### Example
+#### `secret-type` values
+
+- **`plain`** (default): incoming header value is compared byte-for-byte (constant-time) against `webhook-secret`. Used by Telegram.
+- **`hmac-sha256`**: incoming header value is expected to contain a hex HMAC-SHA256 signature. The proxy computes `HMAC-SHA256(webhook-secret, request_body)` and compares with constant-time equality. Used by GitHub, Stripe, Shopify, etc.
+
+> When using `hmac-sha256`, both `webhook-secret` and `secret-header` are required.
+
+#### `secret-extract-template`
+
+A [Tera](https://keats.github.io/tera/) template used to extract the raw hex signature from the header value before comparison.
+
+Variable available: `raw` — the full header value as a string.
+
+| Example | Input | Output |
+| :--- | :--- | :--- |
+| `{{ raw }}` (default) | `abc123` | `abc123` |
+| `{{ raw \| replace(from="sha256=", to="") }}` | `sha256=abc123` | `abc123` |
+
+Available Tera filters: `replace`, `split`, `last`, `trim`, `lower`, `upper`.
+
+### Forward Configuration
+
+| Field | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `url` | string | required | Target URL to forward webhooks to. |
+| `interval-seconds` | integer | required | How often (in seconds) to check for pending webhooks. |
+| `expected-status` | integer | `200` | HTTP status code that indicates successful delivery. |
+| `timeout-seconds` | integer | `15` | Request timeout in seconds. |
+| `sign-header` | string | — | (Optional) Header name to attach the HMAC signature to outgoing requests. |
+| `sign-secret` | string | — | (Optional) Secret key for HMAC-SHA256 signing of outgoing requests. |
+| `sign-template` | string | `{{ signature }}` | Tera template to format the signature into the header value. Variable: `signature`. |
+
+> `sign-header` and `sign-secret` must be configured together.
+
+#### `sign-template`
+
+A Tera template to format the computed hex HMAC-SHA256 signature into the header value sent to the target.
+
+Variable available: `signature` — the hex HMAC-SHA256 signature.
+
+| Example | Output |
+| :--- | :--- |
+| `{{ signature }}` (default) | `abc123...` |
+| `sha256={{ signature }}` | `sha256=abc123...` |
+
+#### Examples
 
 ```yaml
 channels:
+  # Telegram (plain secret — default)
   - name: telegram
-    token: your_read_token_here
-    webhook-secret: your_webhook_secret_here
-    secret-header: X-Telegram-Bot-Api-Secret-Token
+    api-read-token: "token"
+    webhook-secret: "secret"
+    secret-header: "X-Telegram-Bot-Api-Secret-Token"
 
+  # GitHub (HMAC-SHA256)
+  - name: github
+    api-read-token: "token"
+    webhook-secret: "secret"
+    secret-header: "X-Hub-Signature-256"
+    secret-type: hmac-sha256
+    secret-extract-template: '{{ raw | replace(from="sha256=", to="") }}'
+    forward:
+      url: "https://target/hook"
+      interval-seconds: 30
+      sign-header: "X-Hub-Signature-256"
+      sign-secret: "forward_secret"
+      sign-template: "sha256={{ signature }}"
+
+  # Open channel (no verification)
   - name: open
-    token: your_open_read_token_here
-    # no webhook-secret — accepts webhooks without verification
+    api-read-token: "token"
 ```
 
 ## What's next

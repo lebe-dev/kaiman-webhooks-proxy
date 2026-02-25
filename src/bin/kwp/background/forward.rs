@@ -1,12 +1,13 @@
 use std::time::Duration;
 
-use kwp_lib::domain::config::model::ForwardConfig;
+use kwp_lib::domain::config::model::WebhookForwardConfig;
+use kwp_lib::domain::crypto;
 use kwp_lib::domain::webhook::model::WebhookChannel;
 use kwp_lib::domain::webhook::ports::WebhookRepository;
 
 pub async fn run_forwarder<R: WebhookRepository>(
     channel: WebhookChannel,
-    forward_cfg: ForwardConfig,
+    forward_cfg: WebhookForwardConfig,
     repo: R,
     http: reqwest::Client,
     ignored_headers: Vec<String>,
@@ -43,17 +44,53 @@ pub async fn run_forwarder<R: WebhookRepository>(
                     forward_cfg.url
                 );
 
+                let body_bytes = match serde_json::to_vec(&webhook.payload) {
+                    Ok(b) => b,
+                    Err(e) => {
+                        log::error!(
+                            "[forwarder:{}] failed to serialize payload: {}",
+                            channel.as_str(),
+                            e
+                        );
+                        tokio::time::sleep(interval).await;
+                        continue;
+                    }
+                };
+
                 let timeout = Duration::from_secs(forward_cfg.timeout_seconds);
                 let mut request = http
                     .post(&forward_cfg.url)
                     .timeout(timeout)
-                    .json(&webhook.payload);
+                    .header("content-type", "application/json")
+                    .body(body_bytes.clone());
 
                 for (key, value) in &webhook.headers {
                     if ignored_headers.contains(key) {
                         continue;
                     }
                     request = request.header(key, value);
+                }
+
+                if let (Some(sign_header), Some(sign_secret)) =
+                    (&forward_cfg.sign_header, &forward_cfg.sign_secret)
+                {
+                    let sig = crypto::hmac_sha256_hex(sign_secret.as_bytes(), &body_bytes);
+                    let header_value = match forward_cfg.sign_template.as_deref() {
+                        Some(tmpl) => match crypto::render_sign_template(tmpl, &sig) {
+                            Ok(v) => v,
+                            Err(e) => {
+                                log::error!(
+                                    "[forwarder:{}] sign-template render failed: {}",
+                                    channel.as_str(),
+                                    e
+                                );
+                                tokio::time::sleep(interval).await;
+                                continue;
+                            }
+                        },
+                        None => sig,
+                    };
+                    request = request.header(sign_header.as_str(), header_value);
                 }
 
                 match request.send().await {

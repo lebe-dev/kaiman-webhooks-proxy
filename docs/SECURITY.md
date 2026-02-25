@@ -19,3 +19,4 @@ This document provides an overview of the security architecture.
 ## Recommendations
 
 - Use TLS
+- Use [secrets for webhooks](CONFIG.md)
