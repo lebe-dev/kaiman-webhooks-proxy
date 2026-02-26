@@ -20,7 +20,7 @@ impl ClientIpExtractor {
         next: Next,
     ) -> Response {
         let client_ip = Self::extract_client_ip(request.headers(), addr.ip(), &trusted_proxies);
-        log::debug!(
+        log::trace!(
             "extracted client IP: {} (connection IP: {})",
             client_ip,
             addr.ip()
@@ -85,7 +85,7 @@ impl ClientIpExtractor {
     fn is_trusted_proxy(connection_ip: &IpAddr, trusted_proxies: &[String]) -> bool {
         for trusted in trusted_proxies {
             if Self::matches_ip_or_cidr(connection_ip, trusted) {
-                log::debug!(
+                log::trace!(
                     "connection IP {} matched trusted proxy {}",
                     connection_ip,
                     trusted
