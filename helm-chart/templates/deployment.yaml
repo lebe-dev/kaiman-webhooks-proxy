@@ -75,7 +75,7 @@ spec:
       volumes:
         - name: app-config
           secret:
-            secretName: {{ include "helm-chart.fullname" . }}-config
+            secretName: {{ include "helm-chart.fullname" . }}
         {{- if .Values.persistence.enabled }}
         - name: data
           persistentVolumeClaim:
