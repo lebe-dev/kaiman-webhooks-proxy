@@ -137,14 +137,11 @@ pub async fn receive_webhook_route(
             .into_response();
     }
 
-    let payload: serde_json::Value = match serde_json::from_slice(&body) {
-        Ok(v) => v,
-        Err(e) => {
-            log::warn!("invalid JSON body for channel {}: {}", channel_name, e);
-            inc_receive(&channel_name, "invalid_json");
-            return (StatusCode::UNPROCESSABLE_ENTITY, "Invalid JSON").into_response();
-        }
-    };
+    if serde_json::from_slice::<serde_json::Value>(&body).is_err() {
+        log::warn!("invalid JSON body for channel {}", channel_name);
+        inc_receive(&channel_name, "invalid_json");
+        return (StatusCode::UNPROCESSABLE_ENTITY, "Invalid JSON").into_response();
+    }
 
     log::debug!("filtering headers for channel: {}", channel_name);
     let forwarded_headers: HashMap<String, String> = headers
@@ -162,7 +159,7 @@ pub async fn receive_webhook_route(
 
     match state
         .webhook_service
-        .receive_webhook(channel, forwarded_headers, payload)
+        .receive_webhook(channel, forwarded_headers, body)
         .await
     {
         Ok(()) => {

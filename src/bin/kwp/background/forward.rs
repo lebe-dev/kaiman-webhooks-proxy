@@ -55,19 +55,7 @@ pub async fn run_forwarder<R: WebhookRepository>(
                     forward_cfg.url
                 );
 
-                let body_bytes = match serde_json::to_vec(&webhook.payload) {
-                    Ok(b) => b,
-                    Err(e) => {
-                        log::error!(
-                            "[forwarder:{}] failed to serialize payload: {}",
-                            channel.as_str(),
-                            e
-                        );
-                        inc_forward(&channel, "internal_error");
-                        tokio::time::sleep(interval).await;
-                        continue;
-                    }
-                };
+                let body_bytes = webhook.payload.clone();
 
                 let timeout = Duration::from_secs(forward_cfg.timeout_seconds);
                 let mut request = http
@@ -78,6 +66,14 @@ pub async fn run_forwarder<R: WebhookRepository>(
 
                 for (key, value) in &webhook.headers {
                     if ignored_headers.contains(key) {
+                        continue;
+                    }
+                    // Skip the sign header — it will be recomputed below with the correct secret
+                    if forward_cfg
+                        .sign_header
+                        .as_deref()
+                        .is_some_and(|h| h.eq_ignore_ascii_case(key))
+                    {
                         continue;
                     }
                     request = request.header(key, value);

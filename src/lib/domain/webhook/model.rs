@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
+use bytes::Bytes;
 use serde::Serialize;
-use serde_json::Value;
 use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
@@ -17,12 +17,12 @@ impl WebhookChannel {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct Webhook {
     pub id: Option<i64>,
     pub channel: WebhookChannel,
     pub headers: HashMap<String, String>,
-    pub payload: Value,
+    pub payload: Bytes,
     pub received_at: i64,
 }
 
@@ -30,7 +30,7 @@ impl Webhook {
     pub fn new(
         channel: WebhookChannel,
         headers: HashMap<String, String>,
-        payload: Value,
+        payload: Bytes,
         received_at: i64,
     ) -> Self {
         Self {

@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use bytes::Bytes;
+
 use crate::domain::webhook::model::{Webhook, WebhookChannel, WebhookRepositoryError};
 use crate::domain::webhook::ports::WebhookRepository;
 
@@ -16,7 +18,7 @@ impl WebhookRepository for Sqlite {
         )
         .bind(webhook.channel.as_str())
         .bind(headers_json)
-        .bind(webhook.payload.to_string())
+        .bind(webhook.payload.as_ref())
         .bind(webhook.received_at)
         .execute(self.get_pool())
         .await
@@ -48,18 +50,17 @@ impl WebhookRepository for Sqlite {
                 let id: i64 = row.try_get("id").ok()?;
                 let channel: String = row.try_get("channel").ok()?;
                 let headers_str: String = row.try_get("headers").ok()?;
-                let payload: String = row.try_get("payload").ok()?;
+                let payload: Vec<u8> = row.try_get("payload").ok()?;
                 let received_at: i64 = row.try_get("received_at").ok()?;
 
                 let headers: HashMap<String, String> =
                     serde_json::from_str(&headers_str).unwrap_or_default();
-                let payload_json: serde_json::Value = serde_json::from_str(&payload).ok()?;
 
                 Some(Webhook {
                     id: Some(id),
                     channel: WebhookChannel::new(channel),
                     headers,
-                    payload: payload_json,
+                    payload: Bytes::from(payload),
                     received_at,
                 })
             })
@@ -85,18 +86,17 @@ impl WebhookRepository for Sqlite {
             let id: i64 = row.try_get("id").ok()?;
             let channel: String = row.try_get("channel").ok()?;
             let headers_str: String = row.try_get("headers").ok()?;
-            let payload: String = row.try_get("payload").ok()?;
+            let payload: Vec<u8> = row.try_get("payload").ok()?;
             let received_at: i64 = row.try_get("received_at").ok()?;
 
             let headers: HashMap<String, String> =
                 serde_json::from_str(&headers_str).unwrap_or_default();
-            let payload_json: serde_json::Value = serde_json::from_str(&payload).ok()?;
 
             Some(Webhook {
                 id: Some(id),
                 channel: WebhookChannel::new(channel),
                 headers,
-                payload: payload_json,
+                payload: Bytes::from(payload),
                 received_at,
             })
         });
@@ -124,11 +124,11 @@ mod tests {
         Sqlite::new("sqlite::memory:").await.unwrap()
     }
 
-    fn make_webhook(channel: &str, payload: serde_json::Value, received_at: i64) -> Webhook {
+    fn make_webhook(channel: &str, payload: &[u8], received_at: i64) -> Webhook {
         Webhook::new(
             WebhookChannel::new(channel),
             HashMap::new(),
-            payload,
+            Bytes::copy_from_slice(payload),
             received_at,
         )
     }
@@ -137,7 +137,7 @@ mod tests {
     async fn test_insert_webhook() {
         let db = get_in_memory_db().await;
 
-        let webhook = make_webhook("demo", serde_json::json!({"event": "push"}), 1000);
+        let webhook = make_webhook("demo", b"{\"event\":\"push\"}", 1000);
 
         let result = db.insert(&webhook).await;
         assert!(result.is_ok());
@@ -153,7 +153,7 @@ mod tests {
         let webhook = Webhook::new(
             WebhookChannel::new("demo"),
             headers.clone(),
-            serde_json::json!({"event": "push"}),
+            Bytes::from_static(b"{\"event\":\"push\"}"),
             1000,
         );
         db.insert(&webhook).await.unwrap();
@@ -165,7 +165,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(peeked.headers, headers);
-        assert_eq!(peeked.payload, serde_json::json!({"event": "push"}));
+        assert_eq!(peeked.payload, &b"{\"event\":\"push\"}"[..]);
     }
 
     #[tokio::test]
@@ -175,7 +175,7 @@ mod tests {
         for i in 1i64..=3 {
             db.insert(&make_webhook(
                 "demo",
-                serde_json::json!({"seq": i}),
+                format!("{{\"seq\":{i}}}").as_bytes(),
                 1000 + i,
             ))
             .await
@@ -188,7 +188,7 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        assert_eq!(peeked.payload, serde_json::json!({"seq": 1}));
+        assert_eq!(peeked.payload, &b"{\"seq\":1}"[..]);
     }
 
     #[tokio::test]
@@ -207,7 +207,7 @@ mod tests {
     async fn test_delete_by_id() {
         let db = get_in_memory_db().await;
 
-        db.insert(&make_webhook("demo", serde_json::json!({"seq": 1}), 1000))
+        db.insert(&make_webhook("demo", b"{\"seq\":1}", 1000))
             .await
             .unwrap();
 
@@ -235,7 +235,7 @@ mod tests {
         for i in 1i64..=3 {
             db.insert(&make_webhook(
                 "demo",
-                serde_json::json!({"event": i}),
+                format!("{{\"event\":{i}}}").as_bytes(),
                 1000 + i,
             ))
             .await
@@ -260,10 +260,10 @@ mod tests {
     async fn test_cross_channel_isolation() {
         let db = get_in_memory_db().await;
 
-        db.insert(&make_webhook("a", serde_json::json!({"ch": "a"}), 1000))
+        db.insert(&make_webhook("a", b"{\"ch\":\"a\"}", 1000))
             .await
             .unwrap();
-        db.insert(&make_webhook("b", serde_json::json!({"ch": "b"}), 1000))
+        db.insert(&make_webhook("b", b"{\"ch\":\"b\"}", 1000))
             .await
             .unwrap();
 

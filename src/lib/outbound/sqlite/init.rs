@@ -29,7 +29,7 @@ impl Sqlite {
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 channel     TEXT NOT NULL,
                 headers     TEXT NOT NULL DEFAULT '{}',
-                payload     TEXT NOT NULL,
+                payload     BLOB NOT NULL,
                 received_at INTEGER NOT NULL
             );
 

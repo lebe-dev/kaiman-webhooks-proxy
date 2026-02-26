@@ -84,7 +84,8 @@ pub async fn read_webhooks_route(
                 .into_iter()
                 .map(|w| WebhookDto {
                     headers: w.headers,
-                    payload: w.payload,
+                    payload: serde_json::from_slice(&w.payload)
+                        .unwrap_or(serde_json::Value::Null),
                     received_at: w.received_at,
                 })
                 .collect();

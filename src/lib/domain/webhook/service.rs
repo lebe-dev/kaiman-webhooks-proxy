@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use bytes::Bytes;
+
 use super::model::{ReadWebhooksError, ReceiveWebhookError, Webhook, WebhookChannel};
 use super::ports::WebhookRepository;
 
@@ -21,7 +23,7 @@ impl<R: WebhookRepository> WebhookServiceImpl<R> {
         &self,
         channel: WebhookChannel,
         headers: HashMap<String, String>,
-        payload: serde_json::Value,
+        payload: Bytes,
     ) -> Result<(), ReceiveWebhookError> {
         let current_time = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
