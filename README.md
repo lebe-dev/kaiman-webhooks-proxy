@@ -31,6 +31,7 @@ docker compose up -d
 - Unlimited webhook sources with [strong security](docs/SECURITY.md)
 - Forwarding with retries: receive and store webhooks, then forward them to your target service with automatic retries
 - Poll mode: fetch webhook payloads later via [REST API](docs/API.md)
+- Debug webhooks: inspect incoming webhooks and their payloads
 - Blazing fast and lightweight 🦀 (Rust)
   ```bash
   CONTAINER ID   NAME                 CPU %     MEM USAGE / LIMIT
