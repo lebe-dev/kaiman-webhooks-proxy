@@ -86,6 +86,7 @@ pub struct WebhookChannelConfig {
     #[serde(default)]
     pub secret_type: SecretType,
     pub secret_extract_template: Option<String>,
+    pub secret_sign_template: Option<String>,
     pub forward: Option<WebhookForwardConfig>,
     #[serde(default)]
     pub max_body_size: Option<usize>,
@@ -120,6 +121,7 @@ impl PartialEq for WebhookChannelConfig {
             && self.secret_header == other.secret_header
             && self.secret_type == other.secret_type
             && self.secret_extract_template == other.secret_extract_template
+            && self.secret_sign_template == other.secret_sign_template
             && self.forward == other.forward
             && self.max_body_size == other.max_body_size
             && self.allowed_ips == other.allowed_ips
@@ -142,6 +144,11 @@ impl fmt::Display for WebhookChannelConfig {
         } else {
             "None".to_string()
         };
+        let secret_sign_template_display = if self.secret_sign_template.is_some() {
+            "***".to_string()
+        } else {
+            "None".to_string()
+        };
         let forward_display = if self.forward.is_some() {
             "...".to_string()
         } else {
@@ -151,13 +158,15 @@ impl fmt::Display for WebhookChannelConfig {
         write!(
             f,
             "WebhookChannelConfig {{ name: {}, api_read_token: ***, webhook_secret: {}, \
-             secret_header: {}, secret_type: {}, secret_extract_template: {}, forward: {}, \
+             secret_header: {}, secret_type: {}, secret_extract_template: {}, \
+             secret_sign_template: {}, forward: {}, \
              max_body_size: {:?}, allowed_ips: {:?} }}",
             self.name,
             webhook_secret_display,
             secret_header_display,
             self.secret_type,
             secret_extract_template_display,
+            secret_sign_template_display,
             forward_display,
             self.max_body_size,
             self.allowed_ips,
@@ -247,6 +256,11 @@ impl AppConfig {
                         "channel '{}': invalid secret-extract-template: {}",
                         ch.name, e
                     )
+                })?;
+            }
+            if let Some(tmpl) = &ch.secret_sign_template {
+                crypto::validate_template(tmpl).map_err(|e| {
+                    format!("channel '{}': invalid secret-sign-template: {}", ch.name, e)
                 })?;
             }
             if let Some(fwd) = &ch.forward {
@@ -380,6 +394,7 @@ mod tests {
             secret_header: None,
             secret_type: SecretType::Plain,
             secret_extract_template: None,
+            secret_sign_template: None,
             forward: None,
             max_body_size,
             allowed_ips: None,
@@ -753,6 +768,38 @@ sign-template: "sha256={{ signature }}"
         assert!(display.contains("api_read_token: ***"));
         assert!(display.contains("webhook_secret: ***"));
         assert!(display.contains("secret_extract_template: ***"));
+    }
+
+    #[test]
+    fn test_secret_sign_template_deserialization() {
+        let yaml = r#"
+name: test
+api-read-token: tok
+secret-sign-template: "sha256={{ signature }}"
+"#;
+        let cfg: WebhookChannelConfig = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(
+            cfg.secret_sign_template,
+            Some("sha256={{ signature }}".to_string())
+        );
+    }
+
+    #[test]
+    fn test_secret_sign_template_absent_is_none() {
+        let yaml = r#"
+name: test
+api-read-token: tok
+"#;
+        let cfg: WebhookChannelConfig = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(cfg.secret_sign_template, None);
+    }
+
+    #[test]
+    fn test_validate_templates_invalid_sign_template_on_channel() {
+        let mut ch = make_channel("a", None);
+        ch.secret_sign_template = Some("{{ unclosed".to_string());
+        let config = make_app_config(262_144, vec![ch]);
+        assert!(config.validate_templates().is_err());
     }
 
     #[test]

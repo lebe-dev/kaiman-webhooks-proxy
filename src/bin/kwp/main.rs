@@ -17,7 +17,7 @@ use logger::get_logging_config;
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use route::{
     metrics::metrics_route, read_webhooks::read_webhooks_route,
-    receive_webhook::receive_webhook_route,
+    receive_webhook::receive_webhook_route, sign_webhook::sign_webhook_route,
 };
 
 use crate::route::version::get_version_route;
@@ -99,7 +99,8 @@ async fn main() -> anyhow::Result<()> {
     let mut app = Router::new()
         .route("/api/version", get(get_version_route))
         .route("/api/webhook/{channel}", post(receive_webhook_route))
-        .route("/api/webhook/{channel}", get(read_webhooks_route));
+        .route("/api/webhook/{channel}", get(read_webhooks_route))
+        .route("/api/webhook/{channel}/sign", post(sign_webhook_route));
 
     if app_config.metrics_enabled {
         app = app.route("/api/metrics", get(metrics_route));

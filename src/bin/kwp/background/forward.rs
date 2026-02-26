@@ -113,7 +113,8 @@ pub async fn run_forwarder<R: WebhookRepository>(
                         tokio::time::sleep(interval).await;
                     }
                     Ok(resp) => {
-                        if resp.status().as_u16() == forward_cfg.expected_status {
+                        let status = resp.status();
+                        if status.as_u16() == forward_cfg.expected_status {
                             log::info!(
                                 "[forwarder:{}] successfully forwarded webhook id={} → {}",
                                 channel.as_str(),
@@ -130,11 +131,22 @@ pub async fn run_forwarder<R: WebhookRepository>(
                                 );
                             }
                         } else {
+                            let body = resp
+                                .text()
+                                .await
+                                .unwrap_or_else(|e| format!("<failed to read body: {e}>"));
+                            const MAX_BODY: usize = 512;
+                            let body_preview = if body.len() > MAX_BODY {
+                                format!("{}…({} bytes total)", &body[..MAX_BODY], body.len())
+                            } else {
+                                body
+                            };
                             log::warn!(
-                                "[forwarder:{}] unexpected status {} from {}",
+                                "[forwarder:{}] unexpected status {} from {}: {}",
                                 channel.as_str(),
-                                resp.status(),
-                                forward_cfg.url
+                                status,
+                                forward_cfg.url,
+                                body_preview
                             );
                             inc_forward(&channel, "unexpected_status");
                             tokio::time::sleep(interval).await;

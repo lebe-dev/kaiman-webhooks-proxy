@@ -49,7 +49,7 @@ pub async fn receive_webhook_route(
     };
 
     if !channel_config.is_ip_allowed(&client_ip.0) {
-        log::warn!("IP {} blocked for channel: {}", client_ip.0, channel_name);
+        log::warn!("IP {} blocked for channel: '{}'", client_ip.0, channel_name);
         inc_receive(&channel_name, "ip_blocked");
         return (StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
@@ -58,7 +58,7 @@ pub async fn receive_webhook_route(
         &channel_config.webhook_secret,
         &channel_config.secret_header,
     ) {
-        log::debug!("verifying webhook secret for channel: {}", channel_name);
+        log::debug!("verifying webhook secret for channel: '{}'", channel_name);
         let provided_raw = headers
             .get(header_name.as_str())
             .and_then(|v| v.to_str().ok());
@@ -82,7 +82,7 @@ pub async fn receive_webhook_route(
                     Ok(h) => h,
                     Err(e) => {
                         log::error!(
-                            "secret-extract-template render failed for channel {}: {}",
+                            "secret-extract-template render failed for channel '{}': {}",
                             channel_name,
                             e
                         );
@@ -218,6 +218,7 @@ mod tests {
             secret_header: None,
             secret_type: SecretType::Plain,
             secret_extract_template: None,
+            secret_sign_template: None,
             forward: None,
             max_body_size,
             allowed_ips: None,
@@ -232,6 +233,7 @@ mod tests {
             secret_header: Some(header.to_string()),
             secret_type: SecretType::Plain,
             secret_extract_template: None,
+            secret_sign_template: None,
             forward: None,
             max_body_size: None,
             allowed_ips: None,
@@ -246,6 +248,7 @@ mod tests {
             secret_header: None,
             secret_type: SecretType::Plain,
             secret_extract_template: None,
+            secret_sign_template: None,
             forward: None,
             max_body_size: None,
             allowed_ips: Some(ips.into_iter().map(String::from).collect()),
@@ -260,6 +263,7 @@ mod tests {
             secret_header: Some(header.to_string()),
             secret_type: SecretType::HmacSha256,
             secret_extract_template: None,
+            secret_sign_template: None,
             forward: None,
             max_body_size: None,
             allowed_ips: None,
