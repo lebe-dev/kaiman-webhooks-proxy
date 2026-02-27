@@ -56,7 +56,7 @@ service:
   # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
   port: 8080
 
-# This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
+# This block is for setting up the ingress for /api routes for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
   enabled: false
   className: ""
@@ -65,9 +65,24 @@ ingress:
     # kubernetes.io/tls-acme: "true"
   hosts:
     - host: chart-example.local
-      paths:
-        - path: /
-          pathType: ImplementationSpecific
+  tls: []
+    # - secretName: chart-example-tls
+    #   hosts:
+    #     - chart-example.local
+
+# This block is for setting up the frontend ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
+ingressFrontend:
+  enabled: false
+  className: ""
+  # Add IP-based rate limiting and other frontend-specific annotations here
+  # Example for nginx ingress controller:
+  annotations: {}
+    # nginx.ingress.kubernetes.io/limit-connections: "10"
+    # nginx.ingress.kubernetes.io/limit-rps: "100"
+    # nginx.ingress.kubernetes.io/rate-limit: "100"
+    # nginx.ingress.kubernetes.io/whitelist-source-range: "10.0.0.0/8"
+  hosts:
+    - host: chart-example.local
   tls: []
     # - secretName: chart-example-tls
     #   hosts:

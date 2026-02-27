@@ -2,9 +2,10 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "helm-chart.fullname" . }}
+  name: {{ include "helm-chart.fullname" . }}-api
   labels:
     {{- include "helm-chart.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
   {{- with .Values.ingress.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -28,16 +29,12 @@ spec:
     - host: {{ .host | quote }}
       http:
         paths:
-          {{- range .paths }}
-          - path: {{ .path }}
-            {{- with .pathType }}
-            pathType: {{ . }}
-            {{- end }}
+          - path: /api
+            pathType: Prefix
             backend:
               service:
                 name: {{ include "helm-chart.fullname" $ }}
                 port:
                   number: {{ $.Values.service.port }}
-          {{- end }}
     {{- end }}
 {{- end }}
