@@ -289,12 +289,14 @@ mod tests {
             ],
             metrics_enabled: false,
             trusted_proxies: vec![],
+            ui_access_token: None,
         };
         let db = Sqlite::new("sqlite::memory:").await.unwrap();
         let state = Arc::new(AppState {
             config,
             webhook_service: WebhookServiceImpl::new(db),
             metrics_handle: None,
+            http_client: reqwest::Client::new(),
         });
         Router::new()
             .route("/api/webhook/{channel}", post(receive_webhook_route))

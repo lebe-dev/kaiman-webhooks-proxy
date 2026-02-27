@@ -76,6 +76,8 @@ impl AppConfigLoader for EnvConfigLoader {
             Err(_) => vec![],
         };
 
+        let ui_access_token = env::var("UI_ACCESS_TOKEN").ok();
+
         Ok(AppConfig {
             bind,
             log_level,
@@ -87,6 +89,7 @@ impl AppConfigLoader for EnvConfigLoader {
             ignored_headers,
             metrics_enabled,
             trusted_proxies,
+            ui_access_token,
         })
     }
 }

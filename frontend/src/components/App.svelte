@@ -1,0 +1,98 @@
+<script lang="ts">
+    import TokenGate from "./TokenGate.svelte";
+    import ChannelSelect from "./ChannelSelect.svelte";
+    import WebhooksList from "./WebhooksList.svelte";
+    import DebugSend from "./DebugSend.svelte";
+    import {
+        Tabs,
+        TabsList,
+        TabsTrigger,
+        TabsContent,
+    } from "$lib/components/ui/tabs";
+    import { Toaster } from "$lib/components/ui/sonner";
+    import { fetchConfig, type AppConfigResponse } from "$lib/api";
+    import { clearToken } from "$lib/auth";
+
+    let config = $state<AppConfigResponse | null>(null);
+    let selectedChannel = $state("");
+    let configError = $state(false);
+
+    let currentChannelConfig = $derived(
+        config?.channels.find((c) => c.name === selectedChannel) ?? null,
+    );
+
+    async function loadConfig() {
+        try {
+            config = await fetchConfig();
+            if (config.channels.length > 0) {
+                selectedChannel = config.channels[0].name;
+            }
+        } catch {
+            configError = true;
+        }
+    }
+
+    function logout() {
+        clearToken();
+        window.location.reload();
+    }
+</script>
+
+<Toaster />
+<TokenGate>
+    {#snippet children()}
+        <div class="p-6 max-w-5xl mx-auto">
+            <div class="flex items-center justify-between mb-6">
+                <h1 class="text-2xl font-bold">Kaiman Webhooks Proxy</h1>
+                <button
+                    class="text-sm text-muted-foreground hover:text-foreground underline"
+                    onclick={logout}
+                >
+                    Logout
+                </button>
+            </div>
+
+            {#if config === null && !configError}
+                {#await loadConfig()}
+                    <p class="text-sm text-muted-foreground">
+                        Loading configuration...
+                    </p>
+                {/await}
+            {:else if configError}
+                <p class="text-sm text-destructive">
+                    Failed to load configuration.
+                </p>
+            {:else if config}
+                <div class="mb-4">
+                    <label class="text-sm font-medium mr-2" for="channel-select"
+                        >Channel:</label
+                    >
+                    <ChannelSelect
+                        channels={config.channels}
+                        bind:selected={selectedChannel}
+                    />
+                </div>
+
+                <Tabs value="viewer">
+                    <TabsList>
+                        <TabsTrigger value="viewer">Webhooks</TabsTrigger>
+                        <TabsTrigger value="debug">Debug</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="viewer">
+                        {#if selectedChannel}
+                            <WebhooksList channel={selectedChannel} />
+                        {/if}
+                    </TabsContent>
+                    <TabsContent value="debug">
+                        {#if selectedChannel && currentChannelConfig}
+                            <DebugSend
+                                channel={selectedChannel}
+                                channelConfig={currentChannelConfig}
+                            />
+                        {/if}
+                    </TabsContent>
+                </Tabs>
+            {/if}
+        </div>
+    {/snippet}
+</TokenGate>

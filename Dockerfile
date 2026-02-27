@@ -1,3 +1,13 @@
+FROM node:25.2.1-alpine3.23 AS frontend-build
+
+WORKDIR /build/frontend
+
+COPY frontend/package.json frontend/yarn.json ./
+RUN yarn
+
+COPY frontend/ ./
+RUN yarn build
+
 FROM rust:1.93.1-alpine3.23 AS app-build
 
 WORKDIR /build
@@ -5,6 +15,7 @@ WORKDIR /build
 RUN apk add musl-dev elfutils xz wget pkgconfig libressl-dev perl make upx mold
 
 COPY . /build
+COPY --from=frontend-build /build/static /build/static
 
 RUN cargo build --bin kwp --release && \
     eu-elfcompress target/release/kwp && \

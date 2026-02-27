@@ -16,8 +16,9 @@ use kwp_lib::outbound::sqlite::Sqlite;
 use logger::get_logging_config;
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use route::{
-    metrics::metrics_route, read_webhooks::read_webhooks_route,
-    receive_webhook::receive_webhook_route, sign_webhook::sign_webhook_route,
+    config::get_config_route, list_webhooks::list_webhooks_route, metrics::metrics_route,
+    read_webhooks::read_webhooks_route, receive_webhook::receive_webhook_route,
+    sign_webhook::sign_webhook_route, test_send::test_send_route,
 };
 
 use crate::route::version::get_version_route;
@@ -26,12 +27,14 @@ pub mod background;
 pub mod logger;
 pub mod middleware;
 pub mod route;
+pub mod static_files;
 
 #[derive(Clone)]
 pub struct AppState {
     pub config: AppConfig,
     pub webhook_service: WebhookServiceImpl<Sqlite>,
     pub metrics_handle: Option<PrometheusHandle>,
+    pub http_client: reqwest::Client,
 }
 
 #[tokio::main]
@@ -94,19 +97,24 @@ async fn main() -> anyhow::Result<()> {
         config: app_config.clone(),
         webhook_service,
         metrics_handle,
+        http_client: http_client.clone(),
     });
 
     let mut app = Router::new()
         .route("/api/version", get(get_version_route))
+        .route("/api/config", get(get_config_route))
         .route("/api/webhook/{channel}", post(receive_webhook_route))
         .route("/api/webhook/{channel}", get(read_webhooks_route))
-        .route("/api/webhook/{channel}/sign", post(sign_webhook_route));
+        .route("/api/webhook/{channel}/list", get(list_webhooks_route))
+        .route("/api/webhook/{channel}/sign", post(sign_webhook_route))
+        .route("/api/webhook/{channel}/test-send", post(test_send_route));
 
     if app_config.metrics_enabled {
         app = app.route("/api/metrics", get(metrics_route));
     }
 
     let app = app
+        .fallback(static_files::static_file_handler)
         .layer(DefaultBodyLimit::max(app_config.max_body_limit()))
         .layer(axum::middleware::from_fn(
             middleware::client_ip::ClientIpExtractor::middleware,

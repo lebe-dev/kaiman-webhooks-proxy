@@ -104,6 +104,44 @@ impl WebhookRepository for Sqlite {
         Ok(webhook)
     }
 
+    async fn list_by_channel(
+        &self,
+        channel: &WebhookChannel,
+    ) -> Result<Vec<Webhook>, WebhookRepositoryError> {
+        let rows = sqlx::query(
+            "SELECT id, channel, headers, payload, received_at FROM webhooks
+             WHERE channel = ? ORDER BY received_at DESC",
+        )
+        .bind(channel.as_str())
+        .fetch_all(self.get_pool())
+        .await
+        .map_err(|e| WebhookRepositoryError::Other(e.into()))?;
+
+        let webhooks = rows
+            .into_iter()
+            .filter_map(|row| {
+                let id: i64 = row.try_get("id").ok()?;
+                let channel: String = row.try_get("channel").ok()?;
+                let headers_str: String = row.try_get("headers").ok()?;
+                let payload: Vec<u8> = row.try_get("payload").ok()?;
+                let received_at: i64 = row.try_get("received_at").ok()?;
+
+                let headers: HashMap<String, String> =
+                    serde_json::from_str(&headers_str).unwrap_or_default();
+
+                Some(Webhook {
+                    id: Some(id),
+                    channel: WebhookChannel::new(channel),
+                    headers,
+                    payload: Bytes::from(payload),
+                    received_at,
+                })
+            })
+            .collect();
+
+        Ok(webhooks)
+    }
+
     async fn delete_by_id(&self, id: i64) -> Result<(), WebhookRepositoryError> {
         sqlx::query("DELETE FROM webhooks WHERE id = ?")
             .bind(id)
@@ -254,6 +292,64 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(webhooks2.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_list_by_channel_returns_all_newest_first() {
+        let db = get_in_memory_db().await;
+
+        for i in 1i64..=3 {
+            db.insert(&make_webhook(
+                "demo",
+                format!("{{\"seq\":{i}}}").as_bytes(),
+                1000 + i,
+            ))
+            .await
+            .unwrap();
+        }
+
+        let webhooks = db
+            .list_by_channel(&WebhookChannel::new("demo"))
+            .await
+            .unwrap();
+
+        assert_eq!(webhooks.len(), 3);
+        assert_eq!(webhooks[0].received_at, 1003); // newest first
+        assert_eq!(webhooks[1].received_at, 1002);
+        assert_eq!(webhooks[2].received_at, 1001);
+    }
+
+    #[tokio::test]
+    async fn test_list_by_channel_empty() {
+        let db = get_in_memory_db().await;
+
+        let webhooks = db
+            .list_by_channel(&WebhookChannel::new("nonexistent"))
+            .await
+            .unwrap();
+
+        assert!(webhooks.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_list_does_not_delete() {
+        let db = get_in_memory_db().await;
+
+        db.insert(&make_webhook("demo", b"{\"event\":\"push\"}", 1000))
+            .await
+            .unwrap();
+
+        let first = db
+            .list_by_channel(&WebhookChannel::new("demo"))
+            .await
+            .unwrap();
+        assert_eq!(first.len(), 1);
+
+        let second = db
+            .list_by_channel(&WebhookChannel::new("demo"))
+            .await
+            .unwrap();
+        assert_eq!(second.len(), 1);
     }
 
     #[tokio::test]

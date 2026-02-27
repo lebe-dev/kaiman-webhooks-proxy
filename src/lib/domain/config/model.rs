@@ -189,6 +189,7 @@ pub struct AppConfig {
     pub ignored_headers: Vec<String>,
     pub metrics_enabled: bool,
     pub trusted_proxies: Vec<String>,
+    pub ui_access_token: Option<String>,
 }
 
 impl AppConfig {
@@ -202,6 +203,14 @@ impl AppConfig {
     /// Plain name lookup — for POST (incoming webhook routing).
     pub fn find_channel_by_name(&self, name: &str) -> Option<&WebhookChannelConfig> {
         self.channels.iter().find(|c| c.name == name)
+    }
+
+    /// Constant-time check for UI access token.
+    pub fn is_ui_token(&self, bearer: &str) -> bool {
+        self.ui_access_token
+            .as_deref()
+            .map(|t| t.as_bytes().ct_eq(bearer.as_bytes()).into())
+            .unwrap_or(false)
     }
 
     /// Returns the maximum body limit across all channels and the global default.
@@ -358,6 +367,57 @@ impl From<AppConfig> for AppConfigDto {
     }
 }
 
+#[derive(PartialEq, Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ChannelConfigDto {
+    pub name: String,
+    pub secret_type: String,
+    pub secret_header: Option<String>,
+    pub has_forward: bool,
+    pub forward_url: Option<String>,
+    pub sign_header: Option<String>,
+    pub expected_status: Option<u16>,
+    pub timeout_seconds: Option<u64>,
+}
+
+#[derive(PartialEq, Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct AppConfigPublicDto {
+    pub channels: Vec<ChannelConfigDto>,
+}
+
+impl From<&AppConfig> for AppConfigPublicDto {
+    fn from(config: &AppConfig) -> Self {
+        let channels = config
+            .channels
+            .iter()
+            .map(|ch| {
+                let (forward_url, sign_header, expected_status, timeout_seconds) = match &ch.forward
+                {
+                    Some(f) => (
+                        Some(f.url.clone()),
+                        f.sign_header.clone(),
+                        Some(f.expected_status),
+                        Some(f.timeout_seconds),
+                    ),
+                    None => (None, None, None, None),
+                };
+                ChannelConfigDto {
+                    name: ch.name.clone(),
+                    secret_type: ch.secret_type.to_string(),
+                    secret_header: ch.secret_header.clone(),
+                    has_forward: ch.forward.is_some(),
+                    forward_url,
+                    sign_header,
+                    expected_status,
+                    timeout_seconds,
+                }
+            })
+            .collect();
+        AppConfigPublicDto { channels }
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum LoadAppConfigError {
     #[error(transparent)]
@@ -383,6 +443,7 @@ mod tests {
             ignored_headers: vec![],
             metrics_enabled: false,
             trusted_proxies: vec![],
+            ui_access_token: None,
         }
     }
 
@@ -800,6 +861,21 @@ api-read-token: tok
         ch.secret_sign_template = Some("{{ unclosed".to_string());
         let config = make_app_config(262_144, vec![ch]);
         assert!(config.validate_templates().is_err());
+    }
+
+    #[test]
+    fn test_is_ui_token_matches() {
+        let mut config = make_app_config(262_144, vec![]);
+        config.ui_access_token = Some("ui-secret".to_string());
+        assert!(config.is_ui_token("ui-secret"));
+        assert!(!config.is_ui_token("wrong"));
+        assert!(!config.is_ui_token(""));
+    }
+
+    #[test]
+    fn test_is_ui_token_none_returns_false() {
+        let config = make_app_config(262_144, vec![]);
+        assert!(!config.is_ui_token("anything"));
     }
 
     #[test]

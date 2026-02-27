@@ -26,4 +26,10 @@ pub trait WebhookRepository: Send + Sync + Clone + 'static {
         &self,
         id: i64,
     ) -> impl Future<Output = Result<(), WebhookRepositoryError>> + Send;
+
+    /// Non-destructive read of all stored webhooks for a channel, newest first.
+    fn list_by_channel(
+        &self,
+        channel: &WebhookChannel,
+    ) -> impl Future<Output = Result<Vec<Webhook>, WebhookRepositoryError>> + Send;
 }

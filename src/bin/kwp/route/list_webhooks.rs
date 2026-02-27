@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::{
-    Extension, Json,
+    Json,
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
@@ -11,28 +11,22 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::AppState;
-use crate::middleware::client_ip::ClientIp;
 use kwp_lib::domain::webhook::model::WebhookChannel;
 
 #[derive(Serialize)]
-pub struct WebhookDto {
+pub struct WebhookListItemDto {
+    pub id: i64,
     pub headers: HashMap<String, String>,
     pub payload: Value,
     pub received_at: i64,
 }
 
-pub async fn read_webhooks_route(
+pub async fn list_webhooks_route(
     State(state): State<Arc<AppState>>,
-    Extension(client_ip): Extension<ClientIp>,
-    headers: HeaderMap,
     Path(channel_name): Path<String>,
+    headers: HeaderMap,
 ) -> impl IntoResponse {
-    log::debug!(
-        "read webhooks request from {} for channel: {}",
-        client_ip.0,
-        channel_name
-    );
-    log::info!("request to read webhooks for channel: {}", channel_name);
+    log::info!("request to list webhooks for channel: {}", channel_name);
 
     let bearer = headers
         .get("Authorization")
@@ -43,7 +37,7 @@ pub async fn read_webhooks_route(
         Some(b) => b,
         None => {
             log::warn!(
-                "missing or invalid Authorization header for channel: {}",
+                "missing or invalid Authorization header for list on channel: {}",
                 channel_name
             );
             return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response();
@@ -54,7 +48,7 @@ pub async fn read_webhooks_route(
         Some(c) => {
             if c.name != channel_name {
                 log::warn!(
-                    "token for channel: {} was used to attempt access to channel: {}",
+                    "token for channel '{}' used to list channel '{}'",
                     c.name,
                     channel_name
                 );
@@ -63,7 +57,10 @@ pub async fn read_webhooks_route(
         }
         None => {
             if !state.config.is_ui_token(bearer) {
-                log::warn!("invalid token provided for channel: {}", channel_name);
+                log::warn!(
+                    "invalid token for list request on channel: {}",
+                    channel_name
+                );
                 return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response();
             }
             if state.config.find_channel_by_name(&channel_name).is_none() {
@@ -74,29 +71,29 @@ pub async fn read_webhooks_route(
 
     let channel = WebhookChannel::new(channel_name.clone());
 
-    match state
-        .webhook_service
-        .read_and_delete_webhooks(&channel)
-        .await
-    {
+    match state.webhook_service.list_webhooks(&channel).await {
         Ok(webhooks) => {
             log::info!(
-                "successfully read {} webhooks for channel: {}",
+                "listed {} webhooks for channel: {}",
                 webhooks.len(),
                 channel_name
             );
-            let dtos: Vec<WebhookDto> = webhooks
+            let dtos: Vec<WebhookListItemDto> = webhooks
                 .into_iter()
-                .map(|w| WebhookDto {
-                    headers: w.headers,
-                    payload: serde_json::from_slice(&w.payload).unwrap_or(serde_json::Value::Null),
-                    received_at: w.received_at,
+                .filter_map(|w| {
+                    Some(WebhookListItemDto {
+                        id: w.id?,
+                        headers: w.headers,
+                        payload: serde_json::from_slice(&w.payload)
+                            .unwrap_or(serde_json::Value::Null),
+                        received_at: w.received_at,
+                    })
                 })
                 .collect();
             (StatusCode::OK, Json(dtos)).into_response()
         }
         Err(e) => {
-            log::error!("Failed to read webhooks: {}", e);
+            log::error!("Failed to list webhooks: {}", e);
             (StatusCode::INTERNAL_SERVER_ERROR, "Error").into_response()
         }
     }

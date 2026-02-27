@@ -45,6 +45,9 @@ tera = "1.20.1"
 metrics = "0.24.3"
 metrics-exporter-prometheus = { version = "0.18.1", default-features = false, features = ["http-listener"] }
 
+rust-embed = "8.11.0"
+mime_guess = "2"
+
 log = "0.4.27"
 log4rs = "1.3.0"
 

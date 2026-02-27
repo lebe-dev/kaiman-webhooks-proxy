@@ -2,7 +2,9 @@ use std::collections::HashMap;
 
 use bytes::Bytes;
 
-use super::model::{ReadWebhooksError, ReceiveWebhookError, Webhook, WebhookChannel};
+use super::model::{
+    ListWebhooksError, ReadWebhooksError, ReceiveWebhookError, Webhook, WebhookChannel,
+};
 use super::ports::WebhookRepository;
 
 #[derive(Clone)]
@@ -50,6 +52,21 @@ impl<R: WebhookRepository> WebhookServiceImpl<R> {
 
         log::debug!(
             "Read and deleted {} webhooks for channel={}",
+            webhooks.len(),
+            channel.as_str()
+        );
+
+        Ok(webhooks)
+    }
+
+    pub async fn list_webhooks(
+        &self,
+        channel: &WebhookChannel,
+    ) -> Result<Vec<Webhook>, ListWebhooksError> {
+        let webhooks = self.repository.list_by_channel(channel).await?;
+
+        log::debug!(
+            "Listed {} webhooks for channel={}",
             webhooks.len(),
             channel.as_str()
         );

@@ -45,24 +45,31 @@ pub async fn sign_webhook_route(
     };
 
     let channel_config = match state.config.find_channel_by_token(bearer) {
-        Some(c) => c,
+        Some(c) => {
+            if c.name != channel_name {
+                log::warn!(
+                    "token for channel '{}' used to sign for channel '{}'",
+                    c.name,
+                    channel_name
+                );
+                return (StatusCode::FORBIDDEN, "Forbidden").into_response();
+            }
+            c
+        }
         None => {
-            log::warn!(
-                "invalid token for sign request on channel: {}",
-                channel_name
-            );
-            return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response();
+            if !state.config.is_ui_token(bearer) {
+                log::warn!(
+                    "invalid token for sign request on channel: {}",
+                    channel_name
+                );
+                return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response();
+            }
+            match state.config.find_channel_by_name(&channel_name) {
+                Some(c) => c,
+                None => return (StatusCode::NOT_FOUND, "Channel not found").into_response(),
+            }
         }
     };
-
-    if channel_config.name != channel_name {
-        log::warn!(
-            "token for channel '{}' used to sign for channel '{}'",
-            channel_config.name,
-            channel_name
-        );
-        return (StatusCode::FORBIDDEN, "Forbidden").into_response();
-    }
 
     if channel_config.secret_type != SecretType::HmacSha256 {
         log::warn!(
@@ -174,12 +181,14 @@ mod tests {
             ignored_headers: vec![],
             metrics_enabled: false,
             trusted_proxies: vec![],
+            ui_access_token: None,
         };
         let db = Sqlite::new("sqlite::memory:").await.unwrap();
         let state = Arc::new(AppState {
             config,
             webhook_service: WebhookServiceImpl::new(db),
             metrics_handle: None,
+            http_client: reqwest::Client::new(),
         });
         let client_ip: IpAddr = "127.0.0.1".parse().unwrap();
         Router::new()
