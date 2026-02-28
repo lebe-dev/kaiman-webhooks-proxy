@@ -11,6 +11,7 @@
     } from "$lib/components/ui/tabs";
     import { Toaster } from "$lib/components/ui/sonner";
     import { FishingHook, Bug, LogOut } from "@lucide/svelte";
+    import { Button } from "$lib/components/ui/button/index.js";
     import { fetchConfig, type AppConfigResponse } from "$lib/api";
     import { clearToken } from "$lib/auth";
     import { version } from "../../package.json";
@@ -59,16 +60,17 @@
                     Webhooks Proxy
                 </h1>
 
-                <div>
+                <div class="flex items-center gap-2">
                     <ThemeToggler></ThemeToggler>
 
-                    <button
-                        class="text-muted-foreground hover:text-foreground transition-colors"
+                    <Button
                         onclick={logout}
+                        variant="ghost"
+                        size="icon"
                         title="Logout"
                     >
                         <LogOut class="w-4 h-4" />
-                    </button>
+                    </Button>
                 </div>
             </div>
 
