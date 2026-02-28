@@ -14,12 +14,14 @@
     import { fetchConfig, type AppConfigResponse } from "$lib/api";
     import { clearToken } from "$lib/auth";
     import { version } from "../../package.json";
+    import { FailedToFetchRemoteImageDimensions } from "node_modules/astro/dist/core/errors/errors-data";
+    import ThemeToggler from "./ThemeToggler.svelte";
 
     let config = $state<AppConfigResponse | null>(null);
     let selectedChannel = $state("");
     let configError = $state(false);
     let activeTab = $state("viewer");
-    let debugPayload = $state('{\n  \n}');
+    let debugPayload = $state("{\n  \n}");
 
     let currentChannelConfig = $derived(
         config?.channels.find((c) => c.name === selectedChannel) ?? null,
@@ -52,14 +54,22 @@
     {#snippet children()}
         <div class="p-6 max-w-5xl mx-auto">
             <div class="flex items-center justify-between mb-6">
-                <h1 class="text-2xl font-bold">Kaiman Webhooks Proxy</h1>
-                <button
-                    class="text-muted-foreground hover:text-foreground transition-colors"
-                    onclick={logout}
-                    title="Logout"
-                >
-                    <LogOut class="w-4 h-4" />
-                </button>
+                <h1 class="text-2xl font-bold">
+                    <div class="text-gray-400 text-sm font-medium">Kaiman</div>
+                    Webhooks Proxy
+                </h1>
+
+                <div>
+                    <ThemeToggler></ThemeToggler>
+
+                    <button
+                        class="text-muted-foreground hover:text-foreground transition-colors"
+                        onclick={logout}
+                        title="Logout"
+                    >
+                        <LogOut class="w-4 h-4" />
+                    </button>
+                </div>
             </div>
 
             {#if config === null && !configError}

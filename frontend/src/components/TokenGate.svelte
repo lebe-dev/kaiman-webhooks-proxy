@@ -41,7 +41,8 @@
     <div class="flex min-h-screen items-center justify-center">
         <div class="w-full max-w-sm space-y-4 p-6">
             <h1 class="text-2xl font-bold text-center">
-                Kaiman Webhooks Proxy
+                <div class="text-gray-500 inline-block">Kaiman</div>
+                Webhooks Proxy
             </h1>
             <p class="text-sm text-muted-foreground text-center">
                 Enter your access token to continue
