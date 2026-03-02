@@ -76,6 +76,9 @@ impl AppConfigLoader for EnvConfigLoader {
             Err(_) => vec![],
         };
 
+        let ui_enabled = !matches!(env::var("UI_ENABLED").as_deref(), Ok("0") | Ok("false"));
+        let api_enabled = !matches!(env::var("API_ENABLED").as_deref(), Ok("0") | Ok("false"));
+
         let ui_access_token = match env::var("UI_ACCESS_TOKEN") {
             Ok(token) => token,
             Err(_) => {
@@ -100,6 +103,8 @@ impl AppConfigLoader for EnvConfigLoader {
             metrics_enabled,
             trusted_proxies,
             ui_access_token: Some(ui_access_token),
+            ui_enabled,
+            api_enabled,
         })
     }
 }

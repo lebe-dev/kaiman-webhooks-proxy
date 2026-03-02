@@ -4,7 +4,8 @@ use std::sync::Arc;
 use axum::{
     Router,
     extract::DefaultBodyLimit,
-    routing::{get, post},
+    http::StatusCode,
+    routing::{any, get, post},
 };
 use kwp_lib::VERSION;
 use kwp_lib::domain::config::model::AppConfig;
@@ -100,21 +101,33 @@ async fn main() -> anyhow::Result<()> {
         http_client: http_client.clone(),
     });
 
-    let mut app = Router::new()
-        .route("/api/version", get(get_version_route))
-        .route("/api/config", get(get_config_route))
-        .route("/api/webhook/{channel}", post(receive_webhook_route))
-        .route("/api/webhook/{channel}", get(read_webhooks_route))
-        .route("/api/webhook/{channel}/list", get(list_webhooks_route))
-        .route("/api/webhook/{channel}/sign", post(sign_webhook_route))
-        .route("/api/webhook/{channel}/test-send", post(test_send_route));
+    let mut app = Router::new();
 
-    if app_config.metrics_enabled {
-        app = app.route("/api/metrics", get(metrics_route));
+    if app_config.api_enabled {
+        app = app
+            .route("/api/version", get(get_version_route))
+            .route("/api/config", get(get_config_route))
+            .route("/api/webhook/{channel}", post(receive_webhook_route))
+            .route("/api/webhook/{channel}", get(read_webhooks_route))
+            .route("/api/webhook/{channel}/list", get(list_webhooks_route))
+            .route("/api/webhook/{channel}/sign", post(sign_webhook_route))
+            .route("/api/webhook/{channel}/test-send", post(test_send_route));
+
+        if app_config.metrics_enabled {
+            app = app.route("/api/metrics", get(metrics_route));
+        }
+    } else {
+        app = app.route("/api/{*path}", any(|| async { StatusCode::NOT_FOUND }));
+        log::info!("REST API is disabled (API_ENABLED=0)");
+    }
+
+    if app_config.ui_enabled {
+        app = app.fallback(static_files::static_file_handler);
+    } else {
+        log::info!("Web UI is disabled (UI_ENABLED=0)");
     }
 
     let app = app
-        .fallback(static_files::static_file_handler)
         .layer(DefaultBodyLimit::max(app_config.max_body_limit()))
         .layer(axum::middleware::from_fn(
             middleware::client_ip::ClientIpExtractor::middleware,

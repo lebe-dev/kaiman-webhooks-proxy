@@ -182,6 +182,8 @@ mod tests {
             metrics_enabled: false,
             trusted_proxies: vec![],
             ui_access_token: None,
+            ui_enabled: true,
+            api_enabled: true,
         };
         let db = Sqlite::new("sqlite::memory:").await.unwrap();
         let state = Arc::new(AppState {

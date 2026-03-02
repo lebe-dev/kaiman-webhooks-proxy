@@ -190,6 +190,8 @@ pub struct AppConfig {
     pub metrics_enabled: bool,
     pub trusted_proxies: Vec<String>,
     pub ui_access_token: Option<String>,
+    pub ui_enabled: bool,
+    pub api_enabled: bool,
 }
 
 impl AppConfig {
@@ -444,6 +446,8 @@ mod tests {
             metrics_enabled: false,
             trusted_proxies: vec![],
             ui_access_token: None,
+            ui_enabled: true,
+            api_enabled: true,
         }
     }
 

@@ -14,7 +14,7 @@ use kwp_lib::domain::crypto;
 
 #[derive(Deserialize)]
 pub struct TestSendRequest {
-    pub secret: String,
+    pub secret: Option<String>,
     pub payload: serde_json::Value,
 }
 
@@ -82,7 +82,21 @@ pub async fn test_send_route(
         .timeout(Duration::from_secs(forward_cfg.timeout_seconds));
 
     if let Some(sign_header) = &forward_cfg.sign_header {
-        let signature = crypto::hmac_sha256_hex(req.secret.as_bytes(), &body_bytes);
+        let secret_str = match req.secret.as_deref().filter(|s| !s.is_empty()) {
+            Some(s) => s.to_string(),
+            None => match forward_cfg.sign_secret.as_deref() {
+                Some(s) => s.to_string(),
+                None => {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        "No secret provided and sign_secret is not configured for this channel",
+                    )
+                        .into_response();
+                }
+            },
+        };
+
+        let signature = crypto::hmac_sha256_hex(secret_str.as_bytes(), &body_bytes);
 
         let header_value = if let Some(tmpl) = &forward_cfg.sign_template {
             match crypto::render_sign_template(tmpl, &signature) {

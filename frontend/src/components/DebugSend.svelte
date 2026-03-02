@@ -46,14 +46,10 @@
   async function send() {
     const payload = validatePayload();
     if (payload === null) return;
-    if (!secretInput.trim()) {
-      toast.error("Secret is required");
-      return;
-    }
     sending = true;
     result = null;
     try {
-      result = await testSend(channel, payload, secretInput);
+      result = await testSend(channel, payload, secretInput.trim() || null);
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -101,9 +97,14 @@
       <Input
         id="secret-input"
         type="password"
-        placeholder="Webhook signing secret"
+        placeholder="Signing secret (leave blank to use channel config)"
         bind:value={secretInput}
       />
+      {#if channelConfig.signHeader}
+        <p class="text-xs text-muted-foreground">
+          Leave blank to use the signing secret from channel configuration.
+        </p>
+      {/if}
     </div>
 
     <div class="space-y-2">

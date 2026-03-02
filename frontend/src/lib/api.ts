@@ -61,12 +61,12 @@ export async function listWebhooks(channel: string): Promise<WebhookItem[]> {
 export async function testSend(
   channel: string,
   payload: unknown,
-  secret: string
+  secret: string | null
 ): Promise<TestSendResult> {
   const res = await apiFetch(`/api/webhook/${channel}/test-send`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ secret, payload }),
+    body: JSON.stringify({ secret: secret || null, payload }),
   });
   if (!res.ok) {
     const text = await res.text();
