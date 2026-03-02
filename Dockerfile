@@ -2,10 +2,19 @@ FROM node:25.2.1-alpine3.23 AS frontend-build
 
 WORKDIR /build/frontend
 
+RUN apk add --no-cache jq
+
 COPY frontend/package.json frontend/yarn.lock ./
 RUN yarn
 
+COPY Cargo.toml ./Cargo.toml
+RUN VERSION=$(grep '^version' Cargo.toml | head -1 | cut -d'"' -f2) && \
+    jq --arg v "$VERSION" '.version = $v' package.json > package.json.tmp && \
+    mv package.json.tmp package.json && \
+    rm Cargo.toml
+
 COPY frontend/ ./
+
 RUN yarn build
 
 FROM rust:1.93.1-alpine3.23 AS app-build
