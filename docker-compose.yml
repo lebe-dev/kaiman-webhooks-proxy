@@ -1,6 +1,6 @@
 services:
   kwp:
-    image: tinyops/kwp:${KWP_VERSION:-latest}
+    image: tinyops/kwp:0.6.0
     container_name: kwp
     restart: unless-stopped
     env_file: .env
