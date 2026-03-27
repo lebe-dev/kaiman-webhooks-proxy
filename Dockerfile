@@ -21,7 +21,7 @@ FROM rust:1.94.1-alpine3.23 AS app-build
 
 WORKDIR /build
 
-RUN apk add musl-dev elfutils xz wget pkgconfig libressl-dev perl make upx mold
+RUN apk --no-cache add musl-dev elfutils xz wget pkgconfig libressl-dev perl make upx mold
 
 COPY . /build
 COPY --from=frontend-build /build/static /build/static
@@ -36,7 +36,7 @@ FROM alpine:3.23.3
 
 WORKDIR /app
 
-RUN apk add libressl-dev && \
+RUN apk --no-cache add libressl-dev && \
     addgroup -g 10001 -S app && \
     adduser -u 10001 -D -S -G app -h /app app && \
     mkdir /app/data && \
