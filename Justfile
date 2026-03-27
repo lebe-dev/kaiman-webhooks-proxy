@@ -7,13 +7,18 @@ chartName := `cat helm-chart/Chart.yaml | yq -r '.name'`
 chartVersion := `cat helm-chart/Chart.yaml | yq -r '.version'`
 
 cleanup:
-    rm -f *.tgz
+    rm -f {{ chartName }}-*.tgz
 
 format:
     cargo fmt
 
-lint: format
+lint-backend:
     cargo clippy
+
+lint-frontend:
+    cd frontend && yarn lint
+
+lint: lint-backend && lint-frontend
 
 build: lint
     cargo build
@@ -40,7 +45,7 @@ frontend-install:
     cd frontend && npm install
 
 frontend-build:
-    jq --arg v "{{version}}" '.version = $v' frontend/package.json > frontend/package.json.tmp && \
+    jq --arg v "{{ version }}" '.version = $v' frontend/package.json > frontend/package.json.tmp && \
         mv frontend/package.json.tmp frontend/package.json
     cd frontend && npm run build
 
@@ -72,7 +77,7 @@ deploy HOSTNAME:
 
 # RELEASE
 
-release-chart: build-chart
+release-chart: cleanup && build-chart
     rm -rf helm-repo
     git clone git@github.com:tinyops-ru/tinyops-ru.github.io.git helm-repo
     bash -euo pipefail -c '\
