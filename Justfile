@@ -96,5 +96,5 @@ release-chart: cleanup && build-chart
 build-release-image: test
     docker build --progress=plain --platform=linux/amd64 -t {{ image }}:{{ version }} .
 
-release: build-release-image
+release: build-release-image && trivy-save-reports
     docker push {{ image }}:{{ version }}
