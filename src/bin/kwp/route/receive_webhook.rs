@@ -243,6 +243,7 @@ mod tests {
             max_body_size,
             allowed_ips: None,
             monitoring_metrics: true,
+            note: None,
         }
     }
 
@@ -259,6 +260,7 @@ mod tests {
             max_body_size: None,
             allowed_ips: None,
             monitoring_metrics: true,
+            note: None,
         }
     }
 
@@ -275,6 +277,7 @@ mod tests {
             max_body_size: None,
             allowed_ips: Some(ips.into_iter().map(String::from).collect()),
             monitoring_metrics: true,
+            note: None,
         }
     }
 
@@ -291,6 +294,7 @@ mod tests {
             max_body_size: None,
             allowed_ips: None,
             monitoring_metrics: true,
+            note: None,
         }
     }
 

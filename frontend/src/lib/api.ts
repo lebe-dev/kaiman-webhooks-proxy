@@ -29,6 +29,7 @@ export interface ChannelConfig {
   expectedStatus: number | null;
   timeoutSeconds: number | null;
   monitoringMetrics: boolean;
+  note: string | null;
 }
 
 export interface AppConfigResponse {

@@ -7,6 +7,7 @@ channels:
     webhook-secret: "your_webhook_secret_here"
     # Header where Telegram sends the webhook-secret
     secret-header: "X-Telegram-Bot-Api-Secret-Token"
+    # note: "Production bot — do not pause forwarding."  # Optional. Free-text note shown in the UI under the channel selector.
     # monitoring-metrics: false  # Optional (default: true). Disable Prometheus metrics for this channel.
     # max-body-size: 524288  # Optional: override DEFAULT_BODY_LIMIT for this channel (bytes)
     # allowed-ips:            # Optional: restrict source IPs (supports CIDR notation)

@@ -114,6 +114,7 @@ mod tests {
             max_body_size: None,
             allowed_ips: None,
             monitoring_metrics: true,
+            note: None,
         }
     }
 

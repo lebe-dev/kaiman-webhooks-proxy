@@ -11,7 +11,7 @@
         TabsContent,
     } from "$lib/components/ui/tabs";
     import { Toaster } from "$lib/components/ui/sonner";
-    import { FishingHook, Bug, ListOrdered, LogOut } from "@lucide/svelte";
+    import { FishingHook, Bug, ListOrdered, LogOut, Info } from "@lucide/svelte";
     import { Button } from "$lib/components/ui/button/index.js";
     import { fetchConfig, type AppConfigResponse } from "$lib/api";
     import { clearToken } from "$lib/auth";
@@ -121,6 +121,15 @@
                         bind:selected={selectedChannel}
                     />
                 </div>
+
+                {#if currentChannelConfig?.note}
+                    <div
+                        class="mb-4 flex gap-2 rounded-lg border border-border bg-muted p-3 text-sm text-muted-foreground"
+                    >
+                        <Info class="w-4 h-4 mt-0.5 shrink-0" />
+                        <span class="whitespace-pre-wrap">{currentChannelConfig.note}</span>
+                    </div>
+                {/if}
 
                 {#if currentChannelConfig && !currentChannelConfig.monitoringMetrics}
                     <div

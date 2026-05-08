@@ -98,6 +98,8 @@ pub struct WebhookChannelConfig {
     pub allowed_ips: Option<Vec<String>>,
     #[serde(default = "default_monitoring_metrics")]
     pub monitoring_metrics: bool,
+    #[serde(default)]
+    pub note: Option<String>,
 }
 
 impl WebhookChannelConfig {
@@ -132,6 +134,7 @@ impl PartialEq for WebhookChannelConfig {
             && self.max_body_size == other.max_body_size
             && self.allowed_ips == other.allowed_ips
             && self.monitoring_metrics == other.monitoring_metrics
+            && self.note == other.note
     }
 }
 
@@ -167,7 +170,7 @@ impl fmt::Display for WebhookChannelConfig {
             "WebhookChannelConfig {{ name: {}, api_read_token: ***, webhook_secret: {}, \
              secret_header: {}, secret_type: {}, secret_extract_template: {}, \
              secret_sign_template: {}, forward: {}, \
-             max_body_size: {:?}, allowed_ips: {:?}, monitoring_metrics: {} }}",
+             max_body_size: {:?}, allowed_ips: {:?}, monitoring_metrics: {}, note: {:?} }}",
             self.name,
             webhook_secret_display,
             secret_header_display,
@@ -178,6 +181,7 @@ impl fmt::Display for WebhookChannelConfig {
             self.max_body_size,
             self.allowed_ips,
             self.monitoring_metrics,
+            self.note,
         )
     }
 }
@@ -392,6 +396,7 @@ pub struct ChannelConfigDto {
     pub expected_status: Option<u16>,
     pub timeout_seconds: Option<u64>,
     pub monitoring_metrics: bool,
+    pub note: Option<String>,
 }
 
 #[derive(PartialEq, Serialize, Clone, Debug)]
@@ -426,6 +431,7 @@ impl From<&AppConfig> for AppConfigPublicDto {
                     expected_status,
                     timeout_seconds,
                     monitoring_metrics: ch.monitoring_metrics,
+                    note: ch.note.clone(),
                 }
             })
             .collect();
@@ -477,6 +483,7 @@ mod tests {
             max_body_size,
             allowed_ips: None,
             monitoring_metrics: true,
+            note: None,
         }
     }
 
