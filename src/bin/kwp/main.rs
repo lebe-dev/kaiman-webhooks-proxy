@@ -89,6 +89,7 @@ async fn main() -> anyhow::Result<()> {
                 channel,
                 forward_cfg,
                 channel_cfg.webhook_secret.clone(),
+                channel_cfg.monitoring_metrics,
                 repo,
                 client,
                 ignored_headers,

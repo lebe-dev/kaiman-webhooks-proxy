@@ -122,6 +122,14 @@
                     />
                 </div>
 
+                {#if currentChannelConfig && !currentChannelConfig.monitoringMetrics}
+                    <div
+                        class="mb-4 rounded-lg border border-amber-500/50 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400"
+                    >
+                        Prometheus metrics are disabled for this channel.
+                    </div>
+                {/if}
+
                 <Tabs bind:value={activeTab}>
                     <TabsList>
                         <TabsTrigger value="viewer">

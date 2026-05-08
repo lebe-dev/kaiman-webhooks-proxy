@@ -28,6 +28,7 @@ export interface ChannelConfig {
   signHeader: string | null;
   expectedStatus: number | null;
   timeoutSeconds: number | null;
+  monitoringMetrics: boolean;
 }
 
 export interface AppConfigResponse {

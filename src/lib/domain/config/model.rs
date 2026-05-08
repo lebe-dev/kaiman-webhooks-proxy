@@ -47,6 +47,10 @@ fn default_timeout_seconds() -> u64 {
     15
 }
 
+fn default_monitoring_metrics() -> bool {
+    true
+}
+
 impl PartialEq for WebhookForwardConfig {
     fn eq(&self, other: &Self) -> bool {
         self.url == other.url
@@ -92,6 +96,8 @@ pub struct WebhookChannelConfig {
     pub max_body_size: Option<usize>,
     #[serde(default)]
     pub allowed_ips: Option<Vec<String>>,
+    #[serde(default = "default_monitoring_metrics")]
+    pub monitoring_metrics: bool,
 }
 
 impl WebhookChannelConfig {
@@ -125,6 +131,7 @@ impl PartialEq for WebhookChannelConfig {
             && self.forward == other.forward
             && self.max_body_size == other.max_body_size
             && self.allowed_ips == other.allowed_ips
+            && self.monitoring_metrics == other.monitoring_metrics
     }
 }
 
@@ -160,7 +167,7 @@ impl fmt::Display for WebhookChannelConfig {
             "WebhookChannelConfig {{ name: {}, api_read_token: ***, webhook_secret: {}, \
              secret_header: {}, secret_type: {}, secret_extract_template: {}, \
              secret_sign_template: {}, forward: {}, \
-             max_body_size: {:?}, allowed_ips: {:?} }}",
+             max_body_size: {:?}, allowed_ips: {:?}, monitoring_metrics: {} }}",
             self.name,
             webhook_secret_display,
             secret_header_display,
@@ -170,6 +177,7 @@ impl fmt::Display for WebhookChannelConfig {
             forward_display,
             self.max_body_size,
             self.allowed_ips,
+            self.monitoring_metrics,
         )
     }
 }
@@ -383,6 +391,7 @@ pub struct ChannelConfigDto {
     pub sign_header: Option<String>,
     pub expected_status: Option<u16>,
     pub timeout_seconds: Option<u64>,
+    pub monitoring_metrics: bool,
 }
 
 #[derive(PartialEq, Serialize, Clone, Debug)]
@@ -416,6 +425,7 @@ impl From<&AppConfig> for AppConfigPublicDto {
                     sign_header,
                     expected_status,
                     timeout_seconds,
+                    monitoring_metrics: ch.monitoring_metrics,
                 }
             })
             .collect();
@@ -466,6 +476,7 @@ mod tests {
             forward: None,
             max_body_size,
             allowed_ips: None,
+            monitoring_metrics: true,
         }
     }
 
@@ -902,6 +913,27 @@ api-read-token: tok
     fn test_is_ui_token_none_returns_false() {
         let config = make_app_config(262_144, vec![]);
         assert!(!config.is_ui_token("anything"));
+    }
+
+    #[test]
+    fn test_monitoring_metrics_defaults_to_true() {
+        let yaml = r#"
+name: test
+api-read-token: tok
+"#;
+        let cfg: WebhookChannelConfig = serde_yaml::from_str(yaml).unwrap();
+        assert!(cfg.monitoring_metrics);
+    }
+
+    #[test]
+    fn test_monitoring_metrics_false_parses() {
+        let yaml = r#"
+name: test
+api-read-token: tok
+monitoring-metrics: false
+"#;
+        let cfg: WebhookChannelConfig = serde_yaml::from_str(yaml).unwrap();
+        assert!(!cfg.monitoring_metrics);
     }
 
     #[test]

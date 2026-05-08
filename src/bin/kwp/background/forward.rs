@@ -7,7 +7,10 @@ use kwp_lib::domain::crypto;
 use kwp_lib::domain::webhook::model::{ChannelForwardStatus, WebhookChannel};
 use kwp_lib::domain::webhook::ports::WebhookRepository;
 
-fn inc_forward(channel: &WebhookChannel, status: &'static str) {
+fn inc_forward(channel: &WebhookChannel, status: &'static str, enabled: bool) {
+    if !enabled {
+        return;
+    }
     metrics::counter!(
         "kwp_webhook_forward_total",
         "channel" => channel.as_str().to_string(),
@@ -35,10 +38,12 @@ fn update_status(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn run_forwarder<R: WebhookRepository>(
     channel: WebhookChannel,
     forward_cfg: WebhookForwardConfig,
     webhook_secret: Option<String>,
+    monitoring_metrics: bool,
     repo: R,
     http: reqwest::Client,
     ignored_headers: Vec<String>,
@@ -67,7 +72,7 @@ pub async fn run_forwarder<R: WebhookRepository>(
         match repo.peek_oldest_by_channel(&channel).await {
             Err(e) => {
                 log::error!("[forwarder:{}] peek failed: {}", channel.as_str(), e);
-                inc_forward(&channel, "internal_error");
+                inc_forward(&channel, "internal_error", monitoring_metrics);
                 tokio::time::sleep(interval).await;
             }
             Ok(None) => {
@@ -85,7 +90,7 @@ pub async fn run_forwarder<R: WebhookRepository>(
                     Some(id) => id,
                     None => {
                         log::error!("[forwarder:{}] webhook has no id", channel.as_str());
-                        inc_forward(&channel, "internal_error");
+                        inc_forward(&channel, "internal_error", monitoring_metrics);
                         tokio::time::sleep(interval).await;
                         continue;
                     }
@@ -132,7 +137,7 @@ pub async fn run_forwarder<R: WebhookRepository>(
                             "[forwarder:{}] sign-header configured but no sign_secret or webhook_secret available",
                             channel.as_str()
                         );
-                        inc_forward(&channel, "internal_error");
+                        inc_forward(&channel, "internal_error", monitoring_metrics);
                         tokio::time::sleep(interval).await;
                         continue;
                     };
@@ -146,7 +151,7 @@ pub async fn run_forwarder<R: WebhookRepository>(
                                     channel.as_str(),
                                     e
                                 );
-                                inc_forward(&channel, "internal_error");
+                                inc_forward(&channel, "internal_error", monitoring_metrics);
                                 tokio::time::sleep(interval).await;
                                 continue;
                             }
@@ -165,7 +170,7 @@ pub async fn run_forwarder<R: WebhookRepository>(
                             src = next;
                         }
                         log::warn!("[forwarder:{}] request failed: {}", channel.as_str(), cause);
-                        inc_forward(&channel, "network_error");
+                        inc_forward(&channel, "network_error", monitoring_metrics);
 
                         let error_msg = format!("network error: {cause}");
                         let _ = repo.increment_forward_attempts(id, &error_msg).await;
@@ -185,7 +190,7 @@ pub async fn run_forwarder<R: WebhookRepository>(
                                 id,
                                 forward_cfg.url
                             );
-                            inc_forward(&channel, "ok");
+                            inc_forward(&channel, "ok", monitoring_metrics);
                             if let Err(e) = repo.delete_by_id(id).await {
                                 log::error!(
                                     "[forwarder:{}] delete_by_id({}) failed: {}",
@@ -216,7 +221,7 @@ pub async fn run_forwarder<R: WebhookRepository>(
                                 forward_cfg.url,
                                 body_preview
                             );
-                            inc_forward(&channel, "unexpected_status");
+                            inc_forward(&channel, "unexpected_status", monitoring_metrics);
 
                             let error_msg =
                                 format!("HTTP {}: {}", status.as_u16(), body_preview);

@@ -2,6 +2,9 @@ use kwp_lib::domain::config::model::WebhookChannelConfig;
 
 pub fn record_channel_security_gauges(channels: &[WebhookChannelConfig]) {
     for ch in channels {
+        if !ch.monitoring_metrics {
+            continue;
+        }
         let has_ip_allowlist = ch.allowed_ips.is_some() as u8;
         let has_secret = ch.webhook_secret.is_some() as u8;
 
@@ -39,6 +42,7 @@ mod tests {
             forward: None,
             max_body_size: None,
             allowed_ips: None,
+            monitoring_metrics: true,
         }
     }
 
@@ -78,5 +82,26 @@ mod tests {
         assert!(
             output.contains(r#"kwp_channel_security_config{channel="bare",feature="secret"} 0"#)
         );
+    }
+
+    #[test]
+    #[serial]
+    fn security_gauges_skip_disabled_channel() {
+        let recorder = metrics_exporter_prometheus::PrometheusBuilder::new().build_recorder();
+        let handle = recorder.handle();
+
+        let mut quiet = make_channel("quiet");
+        quiet.webhook_secret = Some("s3cret".to_string());
+        quiet.monitoring_metrics = false;
+
+        let loud = make_channel("loud");
+
+        metrics::with_local_recorder(&recorder, || {
+            record_channel_security_gauges(&[quiet, loud]);
+        });
+
+        let output = handle.render();
+        assert!(!output.contains(r#"channel="quiet""#));
+        assert!(output.contains(r#"channel="loud""#));
     }
 }

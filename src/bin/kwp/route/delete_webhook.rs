@@ -113,6 +113,7 @@ mod tests {
             forward: None,
             max_body_size: None,
             allowed_ips: None,
+            monitoring_metrics: true,
         }
     }
 

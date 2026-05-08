@@ -16,7 +16,10 @@ use kwp_lib::domain::config::model::SecretType;
 use kwp_lib::domain::crypto;
 use kwp_lib::domain::webhook::model::WebhookChannel;
 
-fn inc_receive(channel: &str, status: &'static str) {
+fn inc_receive(channel: &str, status: &'static str, enabled: bool) {
+    if !enabled {
+        return;
+    }
     metrics::counter!(
         "kwp_webhook_receive_total",
         "channel" => channel.to_string(),
@@ -43,14 +46,14 @@ pub async fn receive_webhook_route(
         Some(c) => c,
         None => {
             log::warn!("webhook received for unknown channel: {}", channel_name);
-            inc_receive(&channel_name, "channel_not_found");
+            inc_receive(&channel_name, "channel_not_found", true);
             return (StatusCode::NOT_FOUND, "Channel not found").into_response();
         }
     };
 
     if !channel_config.is_ip_allowed(&client_ip.0) {
         log::warn!("IP {} blocked for channel: '{}'", client_ip.0, channel_name);
-        inc_receive(&channel_name, "ip_blocked");
+        inc_receive(&channel_name, "ip_blocked", channel_config.monitoring_metrics);
         return (StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
 
@@ -71,7 +74,7 @@ pub async fn receive_webhook_route(
             SecretType::HmacSha256 => {
                 let Some(raw) = provided_raw else {
                     log::warn!("missing secret header for channel: {}", channel_name);
-                    inc_receive(&channel_name, "unauthorized");
+                    inc_receive(&channel_name, "unauthorized", channel_config.monitoring_metrics);
                     return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response();
                 };
                 let extract_tmpl = channel_config
@@ -86,7 +89,11 @@ pub async fn receive_webhook_route(
                             channel_name,
                             e
                         );
-                        inc_receive(&channel_name, "internal_error");
+                        inc_receive(
+                            &channel_name,
+                            "internal_error",
+                            channel_config.monitoring_metrics,
+                        );
                         return (StatusCode::INTERNAL_SERVER_ERROR, "Error").into_response();
                     }
                 };
@@ -99,7 +106,7 @@ pub async fn receive_webhook_route(
             log::debug!("webhook secret verified for channel: {}", channel_name);
         } else {
             log::warn!("invalid webhook secret for channel: {}", channel_name);
-            inc_receive(&channel_name, "unauthorized");
+            inc_receive(&channel_name, "unauthorized", channel_config.monitoring_metrics);
             return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response();
         }
     }
@@ -115,7 +122,11 @@ pub async fn receive_webhook_route(
             body.len(),
             effective_limit
         );
-        inc_receive(&channel_name, "payload_too_large");
+        inc_receive(
+            &channel_name,
+            "payload_too_large",
+            channel_config.monitoring_metrics,
+        );
         return (StatusCode::PAYLOAD_TOO_LARGE, "Payload Too Large").into_response();
     }
 
@@ -129,7 +140,11 @@ pub async fn receive_webhook_route(
             channel_name,
             content_type
         );
-        inc_receive(&channel_name, "invalid_content_type");
+        inc_receive(
+            &channel_name,
+            "invalid_content_type",
+            channel_config.monitoring_metrics,
+        );
         return (
             StatusCode::UNSUPPORTED_MEDIA_TYPE,
             "Expected application/json",
@@ -139,7 +154,11 @@ pub async fn receive_webhook_route(
 
     if serde_json::from_slice::<serde_json::Value>(&body).is_err() {
         log::warn!("invalid JSON body for channel {}", channel_name);
-        inc_receive(&channel_name, "invalid_json");
+        inc_receive(
+            &channel_name,
+            "invalid_json",
+            channel_config.monitoring_metrics,
+        );
         return (StatusCode::UNPROCESSABLE_ENTITY, "Invalid JSON").into_response();
     }
 
@@ -167,7 +186,7 @@ pub async fn receive_webhook_route(
                 "webhook successfully processed and stored for channel: {}",
                 channel_name
             );
-            inc_receive(&channel_name, "ok");
+            inc_receive(&channel_name, "ok", channel_config.monitoring_metrics);
             (StatusCode::OK, "OK").into_response()
         }
         Err(e) => {
@@ -176,7 +195,11 @@ pub async fn receive_webhook_route(
                 channel_name,
                 e
             );
-            inc_receive(&channel_name, "internal_error");
+            inc_receive(
+                &channel_name,
+                "internal_error",
+                channel_config.monitoring_metrics,
+            );
             (StatusCode::INTERNAL_SERVER_ERROR, "Error").into_response()
         }
     }
@@ -219,6 +242,7 @@ mod tests {
             forward: None,
             max_body_size,
             allowed_ips: None,
+            monitoring_metrics: true,
         }
     }
 
@@ -234,6 +258,7 @@ mod tests {
             forward: None,
             max_body_size: None,
             allowed_ips: None,
+            monitoring_metrics: true,
         }
     }
 
@@ -249,6 +274,7 @@ mod tests {
             forward: None,
             max_body_size: None,
             allowed_ips: Some(ips.into_iter().map(String::from).collect()),
+            monitoring_metrics: true,
         }
     }
 
@@ -264,6 +290,7 @@ mod tests {
             forward: None,
             max_body_size: None,
             allowed_ips: None,
+            monitoring_metrics: true,
         }
     }
 
