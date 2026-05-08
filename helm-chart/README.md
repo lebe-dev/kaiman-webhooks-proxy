@@ -44,6 +44,24 @@ config: |
 
 The pod restarts automatically when this value changes (checksum annotation on the pod template).
 
+### Secrets (`.secrets`)
+
+Secret values are stored alongside `config.yml` in the same Kubernetes Secret. Annotations on that Secret (e.g. for external-secrets / Vault Agent) live here too.
+
+| Parameter | Description | Default |
+|---|---|---|
+| `secrets.annotations` | Annotations applied to the channels Secret | `{}` |
+| `secrets.envs` | Map of secret env vars injected into the container via `envFrom.secretRef`. Keys are exact env var names | `{}` |
+| `secrets.envs.UI_ACCESS_TOKEN` | Token required to access the embedded web UI | _(unset)_ |
+
+```yaml
+secrets:
+  annotations:
+    vault.security.banzaicloud.io/vault-addr: https://vault.company.com
+  envs:
+    UI_ACCESS_TOKEN: "change-me"
+```
+
 ### Persistence (`.persistence`)
 
 SQLite data is stored under `DATA_PATH`. A PersistentVolumeClaim is created automatically.

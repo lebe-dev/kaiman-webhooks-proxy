@@ -200,11 +200,19 @@ envs:
 config: |
   channels: []
 # config: vault:kv/data/infra/kaiman-webhooks-proxy#config.yml
-# -- Annotations for the channels Secret (e.g. for external-secrets or Vault Agent).
-secretAnnotations: {}
-  # vault.security.banzaicloud.io/vault-addr: https://vault.company.com
-  # vault.security.banzaicloud.io/vault-role: shortly
-  # vault.security.banzaicloud.io/vault-path: kubernetes_internal
+
+# -- Everything related to the channels Secret: annotations and secret env vars.
+secrets:
+  # -- Annotations for the channels Secret (e.g. for external-secrets or Vault Agent).
+  annotations: {}
+    # vault.security.banzaicloud.io/vault-addr: https://vault.company.com
+    # vault.security.banzaicloud.io/vault-role: shortly
+    # vault.security.banzaicloud.io/vault-path: kubernetes_internal
+
+  # -- Secret environment variables injected into the container via envFrom.secretRef.
+  # Keys are exact env var names. Stored as stringData in the same Secret as config.yml.
+  envs: {}
+    # UI_ACCESS_TOKEN: "change-me"
 
 # -- Persistence for the SQLite data directory (/app/data).
 # Warning: ReadWriteOnce PVCs do not support replicaCount > 1 with most storage classes.
