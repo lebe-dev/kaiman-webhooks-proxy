@@ -1,4 +1,4 @@
-FROM node:25.2.1-alpine3.23 AS frontend-build
+FROM node:25.9.0-alpine3.23 AS frontend-build
 
 WORKDIR /build/frontend
 
@@ -17,13 +17,15 @@ RUN VERSION=$(grep '^version' Cargo.toml | head -1 | cut -d'"' -f2) && \
 
 RUN yarn build
 
-FROM rust:1.94.1-alpine3.23 AS app-build
+FROM rust:1.95.0-alpine3.23 AS app-build
 
 WORKDIR /build
 
 RUN apk --no-cache add musl-dev elfutils xz wget pkgconfig libressl-dev perl make upx mold
 
-COPY . /build
+COPY Cargo.toml Cargo.lock /build/
+COPY .cargo /build/.cargo
+COPY src /build/src
 COPY --from=frontend-build /build/static /build/static
 
 RUN cargo build --bin kwp --release && \
@@ -32,7 +34,7 @@ RUN cargo build --bin kwp --release && \
     upx -9 --lzma target/release/kwp && \
     chmod +x target/release/kwp
 
-FROM alpine:3.23.3
+FROM alpine:3.23
 
 WORKDIR /app
 
