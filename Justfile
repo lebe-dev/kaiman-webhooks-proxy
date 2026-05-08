@@ -1,4 +1,4 @@
-set dotenv-load := true
+set dotenv-load
 
 version := `cat Cargo.toml | grep version | head -1 | cut -d " " -f 3 | tr -d "\""`
 image := 'tinyops/kwp'
@@ -8,6 +8,14 @@ chartVersion := `cat helm-chart/Chart.yaml | yq -r '.version'`
 
 cleanup:
     rm -f {{ chartName }}-*.tgz
+
+bump-frontend-deps:
+    cd frontend && rm -rf node_modules yarn.lock && yarn install
+
+bump-backend-deps:
+    cargo update
+
+bump-deps: bump-frontend-deps && bump-backend-deps
 
 format:
     cargo fmt
