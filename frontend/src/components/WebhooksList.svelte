@@ -86,7 +86,7 @@
   {:else}
     <div class="space-y-3">
       {#each webhooks as wh (wh.id)}
-        <div class="rounded-lg border p-4 space-y-2">
+        <div class="rounded-lg border bg-card text-card-foreground shadow-card p-4 space-y-2">
           <div class="flex items-center justify-between">
             <span class="text-xs text-muted-foreground font-mono">
               #{wh.id} &middot; {formatDate(wh.received_at)}

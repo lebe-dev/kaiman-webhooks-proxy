@@ -125,7 +125,7 @@
     </Button>
 
     {#if result}
-      <div class="rounded-lg border p-4 space-y-2">
+      <div class="rounded-lg border bg-card text-card-foreground shadow-card p-4 space-y-2">
         <div class="flex items-center gap-2">
           <span class="text-sm font-medium">Response:</span>
           <span

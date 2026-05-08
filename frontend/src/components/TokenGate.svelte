@@ -39,8 +39,8 @@
 {#if authenticated}
     {@render children()}
 {:else}
-    <div class="flex min-h-screen items-center justify-center">
-        <div class="w-full max-w-sm space-y-4 p-6">
+    <div class="flex min-h-screen items-center justify-center p-4">
+        <div class="w-full max-w-sm space-y-4 rounded-lg border bg-card text-card-foreground shadow-card p-6">
             <h1 class="text-2xl font-bold text-center">
                 <div class="text-gray-500 inline-block">Kaiman</div>
                 Webhooks Proxy

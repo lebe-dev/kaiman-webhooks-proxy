@@ -141,11 +141,11 @@
 <div class="space-y-4">
   <!-- Status panel -->
   <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-    <div class="rounded-lg border p-3 space-y-1">
+    <div class="rounded-lg border bg-card text-card-foreground shadow-card p-3 space-y-1">
       <div class="text-xs text-muted-foreground">Queue size</div>
       <div class="text-2xl font-semibold">{status.queue_size}</div>
     </div>
-    <div class="rounded-lg border p-3 space-y-1">
+    <div class="rounded-lg border bg-card text-card-foreground shadow-card p-3 space-y-1">
       <div class="text-xs text-muted-foreground">Status</div>
       <div class="text-sm font-medium">
         {#if status.paused}
@@ -161,11 +161,11 @@
         {/if}
       </div>
     </div>
-    <div class="rounded-lg border p-3 space-y-1">
+    <div class="rounded-lg border bg-card text-card-foreground shadow-card p-3 space-y-1">
       <div class="text-xs text-muted-foreground">Last success</div>
       <div class="text-sm font-medium">{relativeTime(status.last_success_at)}</div>
     </div>
-    <div class="rounded-lg border p-3 space-y-1">
+    <div class="rounded-lg border bg-card text-card-foreground shadow-card p-3 space-y-1">
       <div class="text-xs text-muted-foreground">Last error</div>
       <div class="text-sm font-medium">
         {relativeTime(status.last_error_at)}
@@ -222,7 +222,7 @@
   {:else}
     <div class="space-y-3">
       {#each items as item (item.id)}
-        <div class="rounded-lg border">
+        <div class="rounded-lg border bg-card text-card-foreground shadow-card">
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div

@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@astrojs/svelte": "^7.2.5",
+    "@fontsource-variable/geist": "^5.2.8",
+    "@fontsource-variable/geist-mono": "^5.2.7",
     "@tailwindcss/vite": "^4.2.1",
     "astro": "^5.17.1",
     "svelte": "^5.53.5",
