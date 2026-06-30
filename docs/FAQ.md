@@ -19,3 +19,18 @@ Yes, check [API.md](API.md).
 ## 5. What about CloudFlare Tunnel, ngrok, etc?
 
 Check detail [comparison](COMPARISON.md).
+
+## 6. How quickly are webhooks forwarded — in real-time?
+
+Not exactly real-time, but close. Each channel with forwarding enabled gets a dedicated background loop that runs continuously:
+
+- **If there are pending webhooks in the queue**, the loop forwards them back-to-back with no delay between each successful delivery — so a burst of webhooks is processed as fast as the target URL responds.
+- **When the queue is empty**, the loop sleeps for `interval-seconds` (configured per channel, e.g. 30 s) before checking again.
+- **After a failed delivery** (network error or unexpected HTTP status), the loop also sleeps for `interval-seconds` before retrying.
+
+In practice, the end-to-end latency is:
+
+- **Best case**: near-zero — the webhook arrives while the loop is actively processing and is forwarded on the next iteration.
+- **Worst case**: up to `interval-seconds` — the webhook arrives just after the loop went to sleep.
+
+To reduce worst-case latency, lower `interval-seconds` in the channel's `forward` config. The default example value is 30 seconds.
