@@ -40,13 +40,18 @@ Configure one provider per deployment.
 | `OAUTH_REDIRECT_URL` | Required | Public UI origin followed by `/api/auth/oauth/callback`. Register this exact URL with the provider. |
 | `OAUTH_SCOPES` | Provider default | Space-separated OAuth scopes. |
 | `OAUTH_USER_ID_POINTER` | `/sub` | JSON Pointer to a stable string or integer account ID in the profile. |
-| `OAUTH_ALLOWED_USER_IDS` | Required | Comma-separated account IDs from the configured provider. Each listed ID grants access to all channels in the Web UI. |
+| `OAUTH_ALLOWED_USER_IDS` | Unset | Comma-separated account IDs from the configured provider. |
+| `OAUTH_ALLOWED_USERNAMES` | Unset | Comma-separated usernames. The profile supplies `preferred_username` or, when that field is absent, `username`. |
+| `OAUTH_ALLOWED_GROUPS` | Unset | Comma-separated full group paths. The profile supplies these paths in the `groups` array. |
 | `OAUTH_TOKEN_AUTH_METHOD` | `client_secret_post` | Client authentication at the token endpoint. Set to `client_secret_basic` for HTTP Basic. |
 | `OAUTH_SESSION_TTL_SECONDS` | `3600` | Session lifetime in seconds. Range `1` to `86400`. |
 
 Endpoint URLs require HTTPS. HTTP is supported for `localhost`, `127.0.0.1`,
 and `[::1]` in local development. Serve the UI and its API on the origin
 specified by `OAUTH_REDIRECT_URL`, and forward `/api/auth/*` to KWP.
+
+Configure at least one allowlist. An exact match in any list grants access to
+all channels in the Web UI. Allowlist entries are checked at sign-in.
 
 Login attempts and sessions live in memory on each instance. Run one replica,
 or configure sticky routing for the OAuth callback and subsequent UI requests.
@@ -61,10 +66,14 @@ disabled.
 
 ### GitLab example
 
-[Create a confidential GitLab OAuth application](https://docs.gitlab.com/integration/oauth_provider/)
-with the `read_user` scope. Set its redirect URI to the exact value of
-`OAUTH_REDIRECT_URL`. The allowlist uses numeric GitLab user IDs from the
-[Users API](https://docs.gitlab.com/api/users/#retrieve-the-current-user).
+Register a confidential GitLab OAuth application with the `openid` scope and
+the exact value of `OAUTH_REDIRECT_URL`. GitLab's `/oauth/userinfo` endpoint
+returns usernames and full paths for direct and inherited group memberships.
+[GitLab OpenID Connect documentation](https://docs.gitlab.com/integration/openid_connect_provider/)
+
+For username or ID allowlists with GitLab's `/api/v4/user` endpoint, use
+`read_user` and set `OAUTH_USER_ID_POINTER=/id` if matching IDs. To match IDs
+with `/oauth/userinfo`, use the default pointer `/sub`.
 
 ```dotenv
 AUTH_TYPE=oauth
@@ -73,11 +82,11 @@ OAUTH_CLIENT_ID=your-application-id
 OAUTH_CLIENT_SECRET=your-application-secret
 OAUTH_AUTHORIZE_URL=https://gitlab.example.com/oauth/authorize
 OAUTH_TOKEN_URL=https://gitlab.example.com/oauth/token
-OAUTH_USERINFO_URL=https://gitlab.example.com/api/v4/user
+OAUTH_USERINFO_URL=https://gitlab.example.com/oauth/userinfo
 OAUTH_REDIRECT_URL=https://webhooks.example.com/api/auth/oauth/callback
-OAUTH_SCOPES=read_user
-OAUTH_USER_ID_POINTER=/id
-OAUTH_ALLOWED_USER_IDS=42,9001
+OAUTH_SCOPES=openid
+OAUTH_ALLOWED_USERNAMES=alice,bob
+OAUTH_ALLOWED_GROUPS=platform,engineering/on-call
 ```
 
 With Docker Compose, put these variables in `.env`. With Helm, put

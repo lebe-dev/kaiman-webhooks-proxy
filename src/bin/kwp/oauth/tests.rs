@@ -48,17 +48,26 @@ async fn exchange(
 }
 
 async fn userinfo(headers: HeaderMap) -> Json<Value> {
-    let account_id = match headers
-        .get(header::AUTHORIZATION)
-        .unwrap()
-        .to_str()
-        .unwrap()
-    {
-        "Bearer allowed" => 42,
-        "Bearer denied" => 100,
-        _ => panic!("unexpected token"),
-    };
-    Json(json!({ "id": account_id }))
+    Json(
+        match headers
+            .get(header::AUTHORIZATION)
+            .unwrap()
+            .to_str()
+            .unwrap()
+        {
+            "Bearer allowed" => json!({ "id": 42 }),
+            "Bearer username" => json!({ "sub": "100", "preferred_username": "alice" }),
+            "Bearer gitlab-api" => json!({ "id": 100, "username": "alice" }),
+            "Bearer group" => json!({ "sub": "100", "groups": ["other", "engineering/on-call"] }),
+            "Bearer denied" => json!({
+                "id": 100,
+                "preferred_username": "alice2",
+                "groups": ["other/on-call", "engineering/on-call/nested"]
+            }),
+            "Bearer malformed" => json!({ "groups": "engineering/on-call" }),
+            _ => panic!("unexpected token"),
+        },
+    )
 }
 
 fn settings(key: &str, provider: &str) -> Option<String> {
@@ -71,8 +80,10 @@ fn settings(key: &str, provider: &str) -> Option<String> {
         "OAUTH_REDIRECT_URL" => format!("https://kwp.example.com{CALLBACK_PATH}"),
         "OAUTH_CLIENT_ID" => "kwp".into(),
         "OAUTH_CLIENT_SECRET" => "client-secret".into(),
-        "OAUTH_SCOPES" => "read_user".into(),
+        "OAUTH_SCOPES" => "openid".into(),
         "OAUTH_ALLOWED_USER_IDS" => "42, 9001".into(),
+        "OAUTH_ALLOWED_USERNAMES" => "bob, alice".into(),
+        "OAUTH_ALLOWED_GROUPS" => "platform, engineering/on-call".into(),
         "OAUTH_USER_ID_POINTER" => "/id".into(),
         _ => return None,
     })
@@ -144,7 +155,7 @@ async fn start(app: &Router, provider: &Provider) -> (String, String) {
     let query: HashMap<_, _> = url.query_pairs().collect();
     assert_eq!(query["code_challenge_method"], "S256");
     assert_eq!(query["response_type"], "code");
-    assert_eq!(query["scope"], "read_user");
+    assert_eq!(query["scope"], "openid");
     *provider.challenge.lock().unwrap() = query["code_challenge"].to_string();
     (
         query["state"].to_string(),
@@ -338,23 +349,32 @@ async fn browser_session_through_real_routes() {
         StatusCode::OK
     );
 
-    let (state, flow) = start(&app, &provider).await;
-    let response = send(
-        &app,
-        Method::GET,
-        &format!("{CALLBACK_PATH}?code=denied&state={state}"),
-        &[("cookie", &flow)],
-    )
-    .await;
-    assert_eq!(response.headers()[header::LOCATION], "/?oauth_error=denied");
-    assert_eq!(
-        response
-            .headers()
-            .get_all(header::SET_COOKIE)
-            .iter()
-            .count(),
-        1
-    );
+    for (code, location, cookies) in [
+        ("username", "/", 2),
+        ("gitlab-api", "/", 2),
+        ("group", "/", 2),
+        ("denied", "/?oauth_error=denied", 1),
+        ("malformed", "/?oauth_error=denied", 1),
+    ] {
+        let (state, flow) = start(&app, &provider).await;
+        let response = send(
+            &app,
+            Method::GET,
+            &format!("{CALLBACK_PATH}?code={code}&state={state}"),
+            &[("cookie", &flow)],
+        )
+        .await;
+        assert_eq!(response.headers()[header::LOCATION], location, "{code}");
+        assert_eq!(
+            response
+                .headers()
+                .get_all(header::SET_COOKIE)
+                .iter()
+                .count(),
+            cookies,
+            "{code}"
+        );
+    }
     server.abort();
 }
 
@@ -366,9 +386,32 @@ fn configuration_is_opt_in_and_requires_an_allowlist_and_safe_endpoints() {
             .unwrap()
             .is_none()
     );
+    let all_allowlists = [
+        "OAUTH_ALLOWED_USER_IDS",
+        "OAUTH_ALLOWED_USERNAMES",
+        "OAUTH_ALLOWED_GROUPS",
+    ];
+    for enabled in all_allowlists {
+        let config = OAuthConfig::parse(|key| {
+            Ok(if key != enabled && all_allowlists.contains(&key) {
+                None
+            } else {
+                settings(key, "https://provider.example.com")
+            })
+        });
+        assert!(config.unwrap().is_some(), "{enabled}");
+    }
+    let missing = OAuthConfig::parse(|key| {
+        Ok(if all_allowlists.contains(&key) {
+            Some(", ,".to_owned())
+        } else {
+            settings(key, "https://provider.example.com")
+        })
+    });
+    let error = missing.err().unwrap().to_string();
+    assert!(error.contains("must contain an entry"));
     for (variable, value) in [
         ("AUTH_TYPE", "typo"),
-        ("OAUTH_ALLOWED_USER_IDS", ", ,"),
         ("OAUTH_TOKEN_URL", "http://provider.example.com/token"),
         (
             "OAUTH_AUTHORIZE_URL",

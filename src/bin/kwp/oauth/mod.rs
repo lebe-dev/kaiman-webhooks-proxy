@@ -159,14 +159,32 @@ impl OAuth {
         .await
         .context("OAuth user profile request failed")?;
 
-        let id = match profile.pointer(&self.config.user_id_pointer) {
+        Ok(self.profile_is_allowed(&profile))
+    }
+
+    fn profile_is_allowed(&self, profile: &serde_json::Value) -> bool {
+        let id_allowed = match profile.pointer(&self.config.user_id_pointer) {
             Some(serde_json::Value::String(id)) => self.config.allowed_user_ids.contains(id),
             Some(serde_json::Value::Number(id)) if id.is_i64() || id.is_u64() => {
                 self.config.allowed_user_ids.contains(&id.to_string())
             }
             _ => false,
         };
-        Ok(id)
+        id_allowed
+            || profile
+                .get("preferred_username")
+                .or_else(|| profile.get("username"))
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|username| self.config.allowed_usernames.contains(username))
+            || profile
+                .get("groups")
+                .and_then(serde_json::Value::as_array)
+                .is_some_and(|groups| {
+                    groups
+                        .iter()
+                        .filter_map(serde_json::Value::as_str)
+                        .any(|group| self.config.allowed_groups.contains(group))
+                })
     }
 
     pub fn create_session(&self, previous_session_id: Option<&str>) -> anyhow::Result<String> {

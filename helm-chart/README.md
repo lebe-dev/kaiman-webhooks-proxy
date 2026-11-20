@@ -40,7 +40,7 @@ Values under `envs` are injected via a ConfigMap. Keys are exact environment var
 
 ### OAuth with GitLab
 
-Register a confidential OAuth application with the `read_user` scope and the
+Register a confidential OAuth application with the `openid` scope and the
 exact redirect URL shown in `OAUTH_REDIRECT_URL`. Create the Secret
 `kwp-oauth` in the release namespace with a key named `OAUTH_CLIENT_SECRET`.
 You can also set `secrets.envs.OAUTH_CLIENT_SECRET` to use the chart-managed Secret.
@@ -52,11 +52,11 @@ envs:
   OAUTH_CLIENT_ID: "your-application-id"
   OAUTH_AUTHORIZE_URL: "https://gitlab.example.com/oauth/authorize"
   OAUTH_TOKEN_URL: "https://gitlab.example.com/oauth/token"
-  OAUTH_USERINFO_URL: "https://gitlab.example.com/api/v4/user"
+  OAUTH_USERINFO_URL: "https://gitlab.example.com/oauth/userinfo"
   OAUTH_REDIRECT_URL: "https://webhooks.example.com/api/auth/oauth/callback"
-  OAUTH_SCOPES: "read_user"
-  OAUTH_USER_ID_POINTER: "/id"
-  OAUTH_ALLOWED_USER_IDS: "42,9001"
+  OAUTH_SCOPES: "openid"
+  OAUTH_ALLOWED_USERNAMES: "alice,bob"
+  OAUTH_ALLOWED_GROUPS: "platform,engineering/on-call"
 
 secrets:
   existingSecret: kwp-oauth

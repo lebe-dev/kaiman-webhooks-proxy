@@ -24,6 +24,8 @@ pub struct OAuthConfig {
     pub scopes: String,
     pub user_id_pointer: String,
     pub allowed_user_ids: HashSet<String>,
+    pub allowed_usernames: HashSet<String>,
+    pub allowed_groups: HashSet<String>,
     pub session_ttl: Duration,
 }
 
@@ -87,15 +89,23 @@ impl OAuthConfig {
             "OAUTH_AUTHORIZE_URL cannot override OAuth request parameters"
         );
 
-        let allowed_user_ids: HashSet<_> = required("OAUTH_ALLOWED_USER_IDS")?
-            .split(',')
-            .map(str::trim)
-            .filter(|id| !id.is_empty())
-            .map(str::to_owned)
-            .collect();
+        let allowlist = |key| -> Result<HashSet<String>> {
+            Ok(read(key)?
+                .unwrap_or_default()
+                .split(',')
+                .map(str::trim)
+                .filter(|entry| !entry.is_empty())
+                .map(str::to_owned)
+                .collect())
+        };
+        let allowed_user_ids = allowlist("OAUTH_ALLOWED_USER_IDS")?;
+        let allowed_usernames = allowlist("OAUTH_ALLOWED_USERNAMES")?;
+        let allowed_groups = allowlist("OAUTH_ALLOWED_GROUPS")?;
         ensure!(
-            !allowed_user_ids.is_empty(),
-            "OAUTH_ALLOWED_USER_IDS must contain an account ID"
+            !allowed_user_ids.is_empty()
+                || !allowed_usernames.is_empty()
+                || !allowed_groups.is_empty(),
+            "At least one of OAUTH_ALLOWED_USER_IDS, OAUTH_ALLOWED_USERNAMES, or OAUTH_ALLOWED_GROUPS must contain an entry"
         );
 
         let user_id_pointer = read("OAUTH_USER_ID_POINTER")?.unwrap_or_else(|| "/sub".to_owned());
@@ -134,6 +144,8 @@ impl OAuthConfig {
             scopes: read("OAUTH_SCOPES")?.unwrap_or_default(),
             user_id_pointer,
             allowed_user_ids,
+            allowed_usernames,
+            allowed_groups,
             session_ttl: Duration::from_secs(session_seconds),
         }))
     }
