@@ -2,12 +2,12 @@
 
 The proxy stores incoming webhooks in a SQLite queue. The HTTP receiver inserts
 queued webhooks, and per-channel workers read from the same database to deliver
-them. SQLite uses WAL with a connection pool.
+them. SQLite uses a connection pool and defaults to WAL.
 
-Deploy SQLite on a local filesystem or a block-backed persistent volume. SQLite
-WAL does not support access from multiple hosts over NFS. A rolling update can
-run two pods against the same volume even with one replica. Use `Recreate` to
-stop the old pod before starting its replacement.
+Use a local filesystem or block-backed volume for WAL. On NFS, use rollback
+journaling with `SQLITE_JOURNAL_MODE=delete` and a single replica. The filesystem
+must provide reliable locking and sync operations. Use `Recreate` to stop the
+old pod before its replacement opens the queue.
 
 A local PersistentVolume binds the queue to one node. If that node becomes
 unavailable, recovery requires access to the volume or a database backup.
