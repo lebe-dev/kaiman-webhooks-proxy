@@ -17,7 +17,7 @@ export function clearToken(): void {
 
 export type AuthStatus =
   | { authType: "token" }
-  | { authType: "oauth"; provider: string; authenticated: boolean };
+  | { authType: "oauth"; provider: string; authenticated: boolean; username?: string };
 
 export async function fetchAuthStatus(): Promise<AuthStatus> {
   const res = await fetch("/api/auth/status");

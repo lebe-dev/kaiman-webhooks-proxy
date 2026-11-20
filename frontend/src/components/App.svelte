@@ -75,9 +75,9 @@
 <Toaster />
 <TooltipProvider delayDuration={200}>
 <TokenGate>
-    {#snippet children(logout)}
+    {#snippet children(logout, username)}
     <div class="p-6 max-w-5xl mx-auto">
-            <div class="flex items-center justify-between mb-6">
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mb-6">
                 <h1 class="text-xl font-semibold">
                     <div
                         class="text-primary dark:text-primary/70 text-sm font-medium"
@@ -87,13 +87,20 @@
                     Webhooks Proxy
                 </h1>
 
-                <div class="flex items-center gap-2">
+                <div class="ml-auto flex max-w-full items-center gap-2">
                     <ThemeToggler></ThemeToggler>
+
+                    {#if username}
+                        <span class="max-w-40 truncate text-sm text-muted-foreground" title={username}>
+                            {username}
+                        </span>
+                    {/if}
 
                     <Button
                         onclick={logout}
                         variant="ghost"
                         size="icon"
+                        aria-label="Logout"
                         title="Logout"
                     >
                         <LogOut class="w-4 h-4" />

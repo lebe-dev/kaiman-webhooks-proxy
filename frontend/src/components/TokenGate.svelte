@@ -5,7 +5,7 @@
     import { Button } from "$lib/components/ui/button";
     import { toast } from "svelte-sonner";
 
-    let { children }: { children: Snippet<[() => Promise<void>]> } = $props();
+    let { children }: { children: Snippet<[() => Promise<void>, string | undefined]> } = $props();
 
     let authStatus = $state<AuthStatus | null>(null);
     let statusError = $state(false);
@@ -75,7 +75,7 @@
 </script>
 
 {#if authenticated}
-    {@render children(logout)}
+    {@render children(logout, authStatus?.authType === "oauth" ? authStatus.username : undefined)}
 {:else}
     <div class="flex min-h-screen items-center justify-center p-4">
         <div class="w-full max-w-sm space-y-4 rounded-lg border bg-card text-card-foreground shadow-card p-6">

@@ -14,3 +14,6 @@ unavailable, recovery requires access to the volume or a database backup.
 
 The Helm probes use `/api/version`. A Ready pod can still fail to write to the
 queue.
+
+OAuth sessions store the username returned by the provider when available.
+The UI reads it from `/api/auth/status` using the session cookie.

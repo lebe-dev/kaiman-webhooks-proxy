@@ -25,10 +25,20 @@ struct PendingLogin {
     expires_at: Instant,
 }
 
+#[derive(Clone)]
+pub struct Account {
+    pub username: Option<String>,
+}
+
+struct Session {
+    account: Account,
+    expires_at: Instant,
+}
+
 #[derive(Default)]
 struct LoginStore {
     pending: HashMap<String, PendingLogin>,
-    sessions: HashMap<String, Instant>,
+    sessions: HashMap<String, Session>,
 }
 
 pub struct OAuth {
@@ -113,7 +123,11 @@ impl OAuth {
         store.pending.remove(flow_id).map(|login| login.verifier)
     }
 
-    pub async fn authorize_account(&self, code: &str, verifier: &str) -> anyhow::Result<bool> {
+    pub async fn authorize_account(
+        &self,
+        code: &str,
+        verifier: &str,
+    ) -> anyhow::Result<Option<Account>> {
         let mut params = vec![
             ("grant_type", "authorization_code"),
             ("code", code),
@@ -159,10 +173,20 @@ impl OAuth {
         .await
         .context("OAuth user profile request failed")?;
 
-        Ok(self.profile_is_allowed(&profile))
+        let username = profile
+            .get("preferred_username")
+            .or_else(|| profile.get("username"))
+            .and_then(serde_json::Value::as_str);
+        Ok(self
+            .profile_is_allowed(&profile, username)
+            .then(|| Account {
+                username: username
+                    .filter(|value| !value.trim().is_empty())
+                    .map(str::to_owned),
+            }))
     }
 
-    fn profile_is_allowed(&self, profile: &serde_json::Value) -> bool {
+    fn profile_is_allowed(&self, profile: &serde_json::Value, username: Option<&str>) -> bool {
         let id_allowed = match profile.pointer(&self.config.user_id_pointer) {
             Some(serde_json::Value::String(id)) => self.config.allowed_user_ids.contains(id),
             Some(serde_json::Value::Number(id)) if id.is_i64() || id.is_u64() => {
@@ -171,11 +195,7 @@ impl OAuth {
             _ => false,
         };
         id_allowed
-            || profile
-                .get("preferred_username")
-                .or_else(|| profile.get("username"))
-                .and_then(serde_json::Value::as_str)
-                .is_some_and(|username| self.config.allowed_usernames.contains(username))
+            || username.is_some_and(|username| self.config.allowed_usernames.contains(username))
             || profile
                 .get("groups")
                 .and_then(serde_json::Value::as_array)
@@ -187,7 +207,11 @@ impl OAuth {
                 })
     }
 
-    pub fn create_session(&self, previous_session_id: Option<&str>) -> anyhow::Result<String> {
+    pub fn create_session(
+        &self,
+        previous_session_id: Option<&str>,
+        account: Account,
+    ) -> anyhow::Result<String> {
         let id = random_secret()?;
         let mut store = self.store.lock().expect("OAuth store lock");
         if let Some(previous) = previous_session_id {
@@ -195,24 +219,29 @@ impl OAuth {
         }
         let now = Instant::now();
         if store.sessions.len() >= MAX_SESSIONS {
-            store.sessions.retain(|_, expiry| *expiry > now);
+            store.sessions.retain(|_, session| session.expires_at > now);
         }
         anyhow::ensure!(
             store.sessions.len() < MAX_SESSIONS,
             "OAuth session capacity reached"
         );
-        store
-            .sessions
-            .insert(id.clone(), now + self.config.session_ttl);
+        store.sessions.insert(
+            id.clone(),
+            Session {
+                account,
+                expires_at: now + self.config.session_ttl,
+            },
+        );
         Ok(id)
     }
 
-    pub fn has_session(&self, id: &str) -> bool {
+    pub fn session_account(&self, id: &str) -> Option<Account> {
         let store = self.store.lock().expect("OAuth store lock");
         store
             .sessions
             .get(id)
-            .is_some_and(|expiry| *expiry > Instant::now())
+            .filter(|session| session.expires_at > Instant::now())
+            .map(|session| session.account.clone())
     }
 
     pub fn logout(&self, id: &str) {

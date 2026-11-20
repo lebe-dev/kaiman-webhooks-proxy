@@ -34,7 +34,11 @@ impl FromRequestParts<Arc<AppState>> for ApiAccess {
     ) -> Result<Self, Self::Rejection> {
         let authorization = parts.headers.get(header::AUTHORIZATION);
         let access = if let Some(oauth) = &state.oauth {
-            if authorization.is_none() && has_session(oauth, &parts.headers) {
+            if authorization.is_none()
+                && get_cookie(oauth, &parts.headers, SESSION_COOKIE)
+                    .and_then(|id| oauth.session_account(id))
+                    .is_some()
+            {
                 if !parts.method.is_safe() && !same_origin(oauth, &parts.headers) {
                     log::warn!(
                         "rejected OAuth session request with invalid origin for {}",
@@ -108,15 +112,22 @@ enum AuthStatus<'a> {
     OAuth {
         provider: &'a str,
         authenticated: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        username: Option<String>,
     },
 }
 
 pub async fn auth_status(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Response {
     let status = match &state.oauth {
-        Some(oauth) => AuthStatus::OAuth {
-            provider: &oauth.config.provider_name,
-            authenticated: has_session(oauth, &headers),
-        },
+        Some(oauth) => {
+            let account = get_cookie(oauth, &headers, SESSION_COOKIE)
+                .and_then(|id| oauth.session_account(id));
+            AuthStatus::OAuth {
+                provider: &oauth.config.provider_name,
+                authenticated: account.is_some(),
+                username: account.and_then(|account| account.username),
+            }
+        }
         None => AuthStatus::Token,
     };
     Json(status).into_response()
@@ -190,15 +201,16 @@ async fn complete_login(
     let Some(code) = callback.code.filter(|code| !code.is_empty()) else {
         return login_error("invalid");
     };
-    match oauth.authorize_account(&code, verifier).await {
-        Ok(true) => {}
-        Ok(false) => return login_error("denied"),
+    let account = match oauth.authorize_account(&code, verifier).await {
+        Ok(Some(account)) => account,
+        Ok(None) => return login_error("denied"),
         Err(error) => {
             log::warn!("OAuth login failed: {error:#}");
             return login_error("unavailable");
         }
-    }
-    let session_id = match oauth.create_session(get_cookie(oauth, headers, SESSION_COOKIE)) {
+    };
+    let session_id = match oauth.create_session(get_cookie(oauth, headers, SESSION_COOKIE), account)
+    {
         Ok(id) => id,
         Err(error) => {
             log::warn!("OAuth session could not be created: {error}");
@@ -255,10 +267,6 @@ fn login_error(reason: &str) -> Response {
 fn same_origin(oauth: &OAuth, headers: &HeaderMap) -> bool {
     let mut origins = headers.get_all(header::ORIGIN).iter();
     origins.next().is_some_and(|origin| origin == &oauth.origin) && origins.next().is_none()
-}
-
-fn has_session(oauth: &OAuth, headers: &HeaderMap) -> bool {
-    get_cookie(oauth, headers, SESSION_COOKIE).is_some_and(|id| oauth.has_session(id))
 }
 
 fn cookie_name(oauth: &OAuth, name: &str) -> String {

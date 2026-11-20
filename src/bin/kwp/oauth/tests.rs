@@ -55,7 +55,11 @@ async fn userinfo(headers: HeaderMap) -> Json<Value> {
             .to_str()
             .unwrap()
         {
-            "Bearer allowed" => json!({ "id": 42 }),
+            "Bearer allowed" => json!({
+                "id": 42,
+                "preferred_username": "operator",
+                "username": "legacy"
+            }),
             "Bearer username" => json!({ "sub": "100", "preferred_username": "alice" }),
             "Bearer gitlab-api" => json!({ "id": 100, "username": "alice" }),
             "Bearer group" => json!({ "sub": "100", "groups": ["other", "engineering/on-call"] }),
@@ -149,6 +153,13 @@ async fn send(app: &Router, method: Method, path: &str, headers: &[(&str, &str)]
         .unwrap()
 }
 
+async fn auth_status(app: &Router, cookie: &str) -> Value {
+    let response = send(app, Method::GET, "/api/auth/status", &[("cookie", cookie)]).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+    serde_json::from_slice(&to_bytes(response.into_body(), 4096).await.unwrap()).unwrap()
+}
+
 async fn start(app: &Router, provider: &Provider) -> (String, String) {
     let response = send(app, Method::GET, "/api/auth/oauth/start", &[]).await;
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
@@ -215,17 +226,14 @@ async fn browser_session_through_real_routes() {
     );
     assert_eq!(provider.exchanges.load(Ordering::SeqCst), 1);
 
-    let response = send(
-        &app,
-        Method::GET,
-        "/api/auth/status",
-        &[("cookie", &session)],
-    )
-    .await;
     assert_eq!(
-        serde_json::from_slice::<Value>(&to_bytes(response.into_body(), 4096).await.unwrap())
-            .unwrap(),
-        json!({ "authType": "oauth", "provider": "Example", "authenticated": true })
+        auth_status(&app, &session).await,
+        json!({
+            "authType": "oauth",
+            "provider": "Example",
+            "authenticated": true,
+            "username": "operator"
+        })
     );
     assert_eq!(
         send(&app, Method::GET, "/api/config", &[("cookie", &session)])
@@ -303,7 +311,6 @@ async fn browser_session_through_real_routes() {
         .status(),
         StatusCode::NO_CONTENT
     );
-
     assert_eq!(
         send(
             &app,
@@ -325,6 +332,10 @@ async fn browser_session_through_real_routes() {
         .await
         .status(),
         StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        auth_status(&app, &session).await,
+        json!({ "authType": "oauth", "provider": "Example", "authenticated": false })
     );
     assert_eq!(
         send(&app, Method::GET, "/api/config", &[("cookie", &session)])
@@ -355,12 +366,12 @@ async fn browser_session_through_real_routes() {
         StatusCode::OK
     );
 
-    for (code, location, cookies) in [
-        ("username", "/", 2),
-        ("gitlab-api", "/", 2),
-        ("group", "/", 2),
-        ("denied", "/?oauth_error=denied", 1),
-        ("malformed", "/?oauth_error=denied", 1),
+    for (code, location, cookies, username) in [
+        ("username", "/", 2, Some("alice")),
+        ("gitlab-api", "/", 2, Some("alice")),
+        ("group", "/", 2, None),
+        ("denied", "/?oauth_error=denied", 1, None),
+        ("malformed", "/?oauth_error=denied", 1, None),
     ] {
         let (state, flow) = start(&app, &provider).await;
         let response = send(
@@ -380,6 +391,19 @@ async fn browser_session_through_real_routes() {
             cookies,
             "{code}"
         );
+        if location == "/" {
+            let session = response.headers()[header::SET_COOKIE].to_str().unwrap();
+            let session = session.split(';').next().unwrap();
+            let mut expected = json!({
+                "authType": "oauth",
+                "provider": "Example",
+                "authenticated": true
+            });
+            if let Some(username) = username {
+                expected["username"] = json!(username);
+            }
+            assert_eq!(auth_status(&app, session).await, expected, "{code}");
+        }
     }
     server.abort();
 }
