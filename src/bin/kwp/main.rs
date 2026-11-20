@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::env::{self, VarError};
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 
@@ -254,7 +255,11 @@ async fn run() -> anyhow::Result<()> {
         );
     }
 
-    let db = Sqlite::new(&app_config.db_cnn).await?;
+    let db = match env::var("SQLITE_JOURNAL_MODE").as_deref() {
+        Ok("delete") => Sqlite::new_with_rollback_journal(&app_config.db_cnn).await?,
+        Ok("wal") | Err(VarError::NotPresent) => Sqlite::new(&app_config.db_cnn).await?,
+        _ => anyhow::bail!("SQLITE_JOURNAL_MODE must be wal or delete"),
+    };
     let http_client = http_client::build_http_client()?;
     let forward_statuses = spawn_forwarders(&app_config, &db, &http_client);
 

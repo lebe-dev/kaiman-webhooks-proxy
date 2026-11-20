@@ -4,7 +4,7 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use anyhow::Context;
-use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions, SqliteSynchronous};
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 use sqlx::{Row, SqlitePool};
 
 use super::retry::{LockRetryPolicy, retry_on_locked};
@@ -35,12 +35,12 @@ pub struct SqliteTuning {
     /// Writes serialise regardless of pool size, so a large pool only adds
     /// waiters (and WAL readers that hold back checkpoints).
     pub max_connections: u32,
-    /// Keeping one connection alive means the `journal_mode = WAL` switch happens
-    /// once at startup instead of on every reconnect.
+    /// Keep at least one connection open.
     pub min_connections: u32,
     /// How long a caller waits for a free pool connection. sqlx defaults to 30s,
     /// which outlives any webhook sender's own timeout.
     pub acquire_timeout: Duration,
+    pub journal_mode: SqliteJournalMode,
     /// `NORMAL` is the recommended companion to WAL: it drops the per-commit
     /// fsync, which is what keeps the write lock held. An OS-level crash or power
     /// loss can then lose the most recent commits (the database itself stays
@@ -62,6 +62,7 @@ impl Default for SqliteTuning {
             max_connections: 8,
             min_connections: 1,
             acquire_timeout: Duration::from_secs(3),
+            journal_mode: SqliteJournalMode::Wal,
             synchronous: SqliteSynchronous::Normal,
             retry: LockRetryPolicy::default(),
         }
@@ -90,6 +91,15 @@ impl Sqlite {
         Self::new_with_tuning(path, SqliteTuning::default()).await
     }
 
+    pub async fn new_with_rollback_journal(path: &str) -> Result<Sqlite, anyhow::Error> {
+        let tuning = SqliteTuning {
+            journal_mode: SqliteJournalMode::Delete,
+            synchronous: SqliteSynchronous::Full,
+            ..SqliteTuning::default()
+        };
+        Self::new_with_tuning(path, tuning).await
+    }
+
     pub async fn new_with_tuning(
         path: &str,
         tuning: SqliteTuning,
@@ -97,11 +107,11 @@ impl Sqlite {
         let options = SqliteConnectOptions::from_str(path)
             .with_context(|| format!("invalid database path {}", path))?
             .pragma("foreign_keys", "ON")
-            .pragma("journal_mode", "WAL")
+            .journal_mode(tuning.journal_mode)
             .synchronous(tuning.synchronous)
             .busy_timeout(tuning.busy_timeout);
 
-        // Switching a database into WAL needs a brief exclusive lock that
+        // Switching journal modes needs a brief exclusive lock that
         // `busy_timeout` cannot wait on, so two processes opening the same fresh
         // file can collide here. Retrying is the only cure.
         let pool = retry_on_locked(&tuning.retry, "connect", || {
@@ -269,6 +279,37 @@ mod tests {
             Duration::from_secs(3),
             "sqlx defaults to 30s, which outlives every webhook sender's timeout"
         );
+    }
+
+    #[tokio::test]
+    async fn rollback_journal_preserves_an_existing_wal_queue() {
+        let (_dir, url) = temp_db();
+        let db = Sqlite::new(&url).await.unwrap();
+        sqlx::query(
+            "INSERT INTO webhooks (channel, payload, received_at) VALUES ('sample', X'20', 1)",
+        )
+        .execute(db.get_pool())
+        .await
+        .unwrap();
+        db.get_pool().close().await;
+
+        let db = Sqlite::new_with_rollback_journal(&url).await.unwrap();
+        let pool = db.get_pool();
+        let journal: String = sqlx::query_scalar("PRAGMA journal_mode")
+            .fetch_one(pool)
+            .await
+            .unwrap();
+        let synchronous: i64 = sqlx::query_scalar("PRAGMA synchronous")
+            .fetch_one(pool)
+            .await
+            .unwrap();
+        let queued: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM webhooks")
+            .fetch_one(pool)
+            .await
+            .unwrap();
+        assert_eq!(journal, "delete");
+        assert_eq!(synchronous, 2);
+        assert_eq!(queued, 1);
     }
 
     /// The retry budget only gates whether a *further* attempt is started, so the

@@ -15,6 +15,7 @@ These variables can be set in a `.env` file or directly in your environment.
 | `LOG_TARGET` | `stdout` | Destination for logs (e.g., `stdout`). |
 | `DATA_PATH` | `./data` | Path to the directory where data is stored. |
 | `DATABASE_URL` | `sqlite://./data/kwp.db?mode=rwc` | Connection string for the SQLite database. |
+| `SQLITE_JOURNAL_MODE` | `wal` | Use `delete` with one proxy replica on NFS that provides reliable file locking and sync operations. |
 | `CONFIG_FILE` | `config.yml` | Path to the YAML configuration file. |
 | `FORWARD_BACKOFF_MULTIPLIER` | `2.0` | Growth factor applied to the retry delay after each failed forwarding attempt. `1.0` keeps a fixed interval. Must be >= 1.0. |
 | `FORWARD_BACKOFF_MAX_SECONDS` | `3600` | Ceiling for a single retry delay. Retries never stop, they only become rare. |
