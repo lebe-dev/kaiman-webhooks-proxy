@@ -191,12 +191,12 @@ envs:
   CONFIG_FILE: "/app/config.yml"
   IGNORED_HEADERS: "host,content-length,transfer-encoding,connection,content-type"
   # DEFAULT_BODY_LIMIT: "262144"  # Optional: uncomment to override (bytes)
-  # 1 - enable metrics
-  METRICS_ENABLED: "0"
-  # Set to "0" to disable the embedded web UI
-  UI_ENABLED: "1"
-  # Set to "0" to disable the REST API
-  API_ENABLED: "1"
+  # Enable Prometheus metrics.
+  METRICS_ENABLED: false
+  # Enable the embedded web UI.
+  UI_ENABLED: true
+  # Enable the REST API.
+  API_ENABLED: true
   # Authentication for the Web UI and its API. Set to "oauth" to require OAuth.
   AUTH_TYPE: "token"
   # OAuth provider settings. Set OAUTH_CLIENT_SECRET through secrets.envs or secrets.existingSecret.
