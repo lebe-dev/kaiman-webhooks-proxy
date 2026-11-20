@@ -1,3 +1,6 @@
+[registry]
+global-min-publish-age = "14 days"
+
 # Fix against slow deps fetch
 [net]
 git-fetch-with-cli = true
