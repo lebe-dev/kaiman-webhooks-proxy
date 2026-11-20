@@ -1,3 +1,6 @@
+{{- if not (has .Values.configSource (list "secret" "configMap")) }}
+{{- fail "configSource must be either secret or configMap" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -14,7 +17,11 @@ spec:
   template:
     metadata:
       annotations:
+        checksum/envs: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
         checksum/channels-secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- if eq .Values.configSource "configMap" }}
+        checksum/channels-config: {{ include (print $.Template.BasePath "/channels-config.yaml") . | sha256sum }}
+        {{- end }}
         {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -49,6 +56,10 @@ spec:
             - secretRef:
                 name: {{ include "helm-chart.fullname" . }}
             {{- end }}
+            {{- with .Values.secrets.existingSecret }}
+            - secretRef:
+                name: {{ . | quote }}
+            {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
@@ -79,8 +90,13 @@ spec:
             {{- end }}
       volumes:
         - name: app-config
+          {{- if eq .Values.configSource "configMap" }}
+          configMap:
+            name: {{ include "helm-chart.channelsConfigName" . }}
+          {{- else }}
           secret:
             secretName: {{ include "helm-chart.fullname" . }}
+          {{- end }}
         {{- if .Values.persistence.enabled }}
         - name: data
           persistentVolumeClaim:

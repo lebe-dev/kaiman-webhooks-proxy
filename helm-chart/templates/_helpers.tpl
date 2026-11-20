@@ -60,3 +60,7 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{- define "helm-chart.channelsConfigName" -}}
+{{- printf "%s-channels" (include "helm-chart.fullname" . | trunc 54 | trimSuffix "-") -}}
+{{- end -}}

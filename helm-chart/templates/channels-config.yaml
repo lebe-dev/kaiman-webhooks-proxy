@@ -1,0 +1,10 @@
+{{- if eq .Values.configSource "configMap" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "helm-chart.channelsConfigName" . }}
+  labels:
+    {{- include "helm-chart.labels" . | nindent 4 }}
+data:
+  config.yml: {{ .Values.config | default "channels: []\n" | quote }}
+{{- end }}

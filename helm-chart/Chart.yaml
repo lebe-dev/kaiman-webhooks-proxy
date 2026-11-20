@@ -15,17 +15,17 @@ type: application
 # This is the chart version. This version number should be incremented each time you make changes
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
-version: 1.1.1
+version: 1.2.0
 
 # This is the version number of the application being deployed. This version number should be
 # incremented each time you make changes to the application. Versions are not expected to
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
-appVersion: "1.2.0"
+appVersion: "1.3.0"
 
 annotations:
   artifacthub.io/changes: |
     - kind: added
-      description: Security configuration metrics (kwp_channel_security_config gauge) to monitor channel security posture via Prometheus
+      description: Support mounting channel configuration from a ConfigMap with environment variable references for sensitive values
     - kind: added
-      description: Prometheus alerts for channels without webhook secret or IP allowlist
+      description: Support importing environment variables from an existing Kubernetes Secret

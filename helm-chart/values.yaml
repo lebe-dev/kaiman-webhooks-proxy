@@ -202,26 +202,32 @@ envs:
   # Environment tag for Sentry events. Only used when secrets.envs.SENTRY_DSN is set.
   # SENTRY_ENVIRONMENT: "production"
 
-# -- Raw YAML content for /app/config.yml — placed in a Secret and mounted into the container.
-# See config.yml-dist for full examples. Contains secrets (api-read-token, webhook-secret).
+# -- Kubernetes resource that stores /app/config.yml: secret or configMap.
+# Use configMap for configuration that refers to secrets through environment variables.
+configSource: secret
+
+# -- Raw YAML mounted at /app/config.yml. See docs/CONFIG.md for environment references.
 config: |
   channels: []
-# config: vault:kv/data/infra/kaiman-webhooks-proxy#config.yml
 
-# -- Everything related to the channels Secret: annotations and secret env vars.
+# -- Secret environment variables and settings for the chart-managed Secret.
 secrets:
-  # -- Annotations for the channels Secret (e.g. for external-secrets or Vault Agent).
+  # -- Annotations for the chart-managed Secret.
   annotations: {}
     # vault.security.banzaicloud.io/vault-addr: https://vault.company.com
     # vault.security.banzaicloud.io/vault-role: shortly
     # vault.security.banzaicloud.io/vault-path: kubernetes_internal
 
   # -- Secret environment variables injected into the container via envFrom.secretRef.
-  # Keys are exact env var names. Stored as stringData in the same Secret as config.yml.
+  # Keys are exact env var names. Values are stored as stringData in the chart-managed Secret.
   envs: {}
     # UI_ACCESS_TOKEN: "change-me"
     # Sentry DSN. Leave unset to disable error reporting. See docs/MONITORING.md.
     # SENTRY_DSN: "https://key@sentry.example.com/1"
+
+  # -- Name of an existing Secret in the release namespace imported via envFrom.secretRef.
+  # Its keys take precedence over envs and secrets.envs.
+  existingSecret: ""
 
 # -- Persistence for the SQLite data directory (/app/data).
 # Warning: ReadWriteOnce PVCs do not support replicaCount > 1 with most storage classes.
