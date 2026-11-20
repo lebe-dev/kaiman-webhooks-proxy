@@ -81,6 +81,7 @@ channels:
   - name: telegram
     api-read-token: TELEGRAM_WEBHOOK_API_READ_TOKEN
     monitoring-metrics: '${TELEGRAM_METRICS}'
+  - name: receive-only
 ",
     )
     .env(TOKEN_VAR, TOKEN)
@@ -148,11 +149,11 @@ channels:
 #[tokio::test]
 async fn required_fields_are_still_checked_after_substitution() {
     let dir = TempDir::new().unwrap();
-    let yaml = "channels: [{name: '${ChannelName}'}]";
-    let error = startup_error(kwp(&dir, yaml).env("ChannelName", "telegram")).await;
+    let yaml = "channels: [{note: '${ChannelNote}'}]";
+    let error = startup_error(kwp(&dir, yaml).env("ChannelNote", "telegram")).await;
 
     assert!(
-        error.contains("missing configuration field") && error.contains("api-read-token"),
+        error.contains("missing configuration field") && error.contains("name"),
         "{error}"
     );
 }

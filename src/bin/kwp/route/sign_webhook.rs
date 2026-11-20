@@ -114,7 +114,7 @@ mod tests {
     fn make_hmac_channel(name: &str, secret: &str, header: &str) -> WebhookChannelConfig {
         WebhookChannelConfig {
             name: name.to_string(),
-            api_read_token: "read-token".to_string(),
+            api_read_token: Some("read-token".to_string()),
             webhook_secret: Some(secret.to_string()),
             secret_header: Some(header.to_string()),
             secret_type: SecretType::HmacSha256,
@@ -131,7 +131,7 @@ mod tests {
     fn make_plain_channel(name: &str) -> WebhookChannelConfig {
         WebhookChannelConfig {
             name: name.to_string(),
-            api_read_token: "read-token".to_string(),
+            api_read_token: Some("read-token".to_string()),
             webhook_secret: Some("sec".to_string()),
             secret_header: Some("X-Secret".to_string()),
             secret_type: SecretType::Plain,

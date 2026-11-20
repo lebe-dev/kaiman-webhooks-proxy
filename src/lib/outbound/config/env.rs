@@ -357,7 +357,7 @@ channels:
         let config: WebhookChannelsConfig = config.try_deserialize().unwrap();
         let channel = &config.channels[0];
         assert_eq!(channel.name, "telegram");
-        assert_eq!(channel.api_read_token, "000123");
+        assert_eq!(channel.api_read_token.as_deref(), Some("000123"));
         assert_eq!(channel.webhook_secret.as_deref(), Some(vars["secret"]));
         assert_eq!(channel.note.as_deref(), Some("LITERAL_NOTE"));
         assert_eq!(channel.secret_header.as_deref(), Some("${literal_header}"));

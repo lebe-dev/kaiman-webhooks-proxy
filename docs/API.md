@@ -46,6 +46,7 @@ Used by your local application or scripts to retrieve pending webhooks for a spe
 *   **Headers:**
     *   `Authorization: Bearer <token>`: The `api-read-token` configured for this channel in `config.yml`.
 *   **Authentication:** Bearer Token.
+    *   Channels with an omitted, empty, or whitespace-only `api-read-token` can use `UI_ACCESS_TOKEN` when `AUTH_TYPE=token`. This endpoint is unavailable for those channels in OAuth mode.
 *   **Response:**
     *   `200 OK`: Returns a JSON array of webhooks. **Note:** Webhooks are deleted from the proxy immediately after being successfully returned in this call.
     *   `401 Unauthorized`: Missing or invalid Bearer token.

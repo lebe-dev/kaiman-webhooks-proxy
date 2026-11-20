@@ -102,7 +102,13 @@ async fn app(oauth: Option<OAuth>) -> Router {
         log_target: "stdout".into(),
         data_path: ".".into(),
         db_cnn: "sqlite::memory:".into(),
-        channels: vec![channel("a"), channel("b")],
+        channels: vec![
+            channel("a"),
+            channel("b"),
+            serde_yaml::from_str("name: omitted").unwrap(),
+            serde_yaml::from_str("name: empty\napi-read-token: ''").unwrap(),
+            serde_yaml::from_str("name: blank\napi-read-token: ' '").unwrap(),
+        ],
         default_body_limit: 262_144,
         ignored_headers: vec![],
         metrics_enabled: false,
@@ -468,4 +474,59 @@ async fn token_mode_accepts_bearer_and_disables_oauth_routes() {
             .status(),
         StatusCode::NOT_FOUND
     );
+}
+
+#[tokio::test]
+async fn channels_without_usable_read_tokens_require_operator_access() {
+    let app = app(None).await;
+    for channel in ["omitted", "empty", "blank"] {
+        let path = format!("/api/webhook/{channel}");
+        assert_eq!(
+            send(
+                &app,
+                Method::POST,
+                &path,
+                &[("content-type", "application/json")]
+            )
+            .await
+            .status(),
+            StatusCode::OK
+        );
+
+        for path in [&format!("{path}/list"), &path] {
+            for (headers, expected) in [
+                (&[][..], StatusCode::UNAUTHORIZED),
+                (
+                    &[("authorization", "Bearer ")][..],
+                    StatusCode::UNAUTHORIZED,
+                ),
+                (
+                    &[("authorization", "Bearer  ")][..],
+                    StatusCode::UNAUTHORIZED,
+                ),
+                (
+                    &[("authorization", "Bearer a-token")][..],
+                    StatusCode::FORBIDDEN,
+                ),
+                (&[("authorization", "Bearer ui-token")][..], StatusCode::OK),
+            ] {
+                let response = send(&app, Method::GET, path, headers).await;
+                assert_eq!(response.status(), expected, "{path} with {headers:?}");
+            }
+        }
+    }
+
+    for path in ["/api/webhook/a", "/api/webhook/a/list"] {
+        assert_eq!(
+            send(
+                &app,
+                Method::GET,
+                path,
+                &[("authorization", "Bearer a-token")]
+            )
+            .await
+            .status(),
+            StatusCode::OK
+        );
+    }
 }

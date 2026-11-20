@@ -83,7 +83,7 @@ mod tests {
     fn make_channel(name: &str) -> WebhookChannelConfig {
         WebhookChannelConfig {
             name: name.to_string(),
-            api_read_token: "read-token".to_string(),
+            api_read_token: Some("read-token".to_string()),
             webhook_secret: None,
             secret_header: None,
             secret_type: SecretType::Plain,
@@ -164,9 +164,9 @@ mod tests {
     #[tokio::test]
     async fn test_delete_wrong_channel_token_returns_403() {
         let mut ch1 = make_channel("ch1");
-        ch1.api_read_token = "ch1-token".to_string();
+        ch1.api_read_token = Some("ch1-token".to_string());
         let mut ch2 = make_channel("ch2");
-        ch2.api_read_token = "ch2-token".to_string();
+        ch2.api_read_token = Some("ch2-token".to_string());
 
         let app = build_app(vec![ch1, ch2]).await;
         let req = Request::builder()
@@ -183,7 +183,7 @@ mod tests {
     #[tokio::test]
     async fn test_delete_with_channel_token_returns_204() {
         let mut ch = make_channel("test");
-        ch.api_read_token = "test-token".to_string();
+        ch.api_read_token = Some("test-token".to_string());
 
         let app = build_app(vec![ch]).await;
         let req = Request::builder()

@@ -128,7 +128,7 @@ The `channels` key contains a list of channel configurations.
 | Field | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `name` | string | required | A unique name for the channel. |
-| `api-read-token` | string | required | Bearer token used to authenticate requests for reading webhooks from this channel. |
+| `api-read-token` | string | unset | Channel-specific Bearer token for API access. Omitting it or setting it to an empty or whitespace-only value disables channel-token authentication. |
 | `webhook-secret` | string | — | (Optional) The secret key used to verify the authenticity of incoming webhooks. |
 | `secret-header` | string | — | (Optional) The HTTP header name that contains the verification token or signature. |
 | `secret-type` | enum | `plain` | Verification mode: `plain` (constant-time byte comparison) or `hmac-sha256`. |

@@ -339,7 +339,7 @@ mod tests {
     fn make_channel(name: &str, max_body_size: Option<usize>) -> WebhookChannelConfig {
         WebhookChannelConfig {
             name: name.to_string(),
-            api_read_token: "read-token".to_string(),
+            api_read_token: Some("read-token".to_string()),
             webhook_secret: None,
             secret_header: None,
             secret_type: SecretType::Plain,
@@ -356,7 +356,7 @@ mod tests {
     fn make_channel_with_secret(name: &str, secret: &str, header: &str) -> WebhookChannelConfig {
         WebhookChannelConfig {
             name: name.to_string(),
-            api_read_token: "read-token".to_string(),
+            api_read_token: Some("read-token".to_string()),
             webhook_secret: Some(secret.to_string()),
             secret_header: Some(header.to_string()),
             secret_type: SecretType::Plain,
@@ -373,7 +373,7 @@ mod tests {
     fn make_channel_with_allowed_ips(name: &str, ips: Vec<&str>) -> WebhookChannelConfig {
         WebhookChannelConfig {
             name: name.to_string(),
-            api_read_token: "read-token".to_string(),
+            api_read_token: Some("read-token".to_string()),
             webhook_secret: None,
             secret_header: None,
             secret_type: SecretType::Plain,
@@ -390,7 +390,7 @@ mod tests {
     fn make_channel_with_hmac(name: &str, secret: &str, header: &str) -> WebhookChannelConfig {
         WebhookChannelConfig {
             name: name.to_string(),
-            api_read_token: "read-token".to_string(),
+            api_read_token: Some("read-token".to_string()),
             webhook_secret: Some(secret.to_string()),
             secret_header: Some(header.to_string()),
             secret_type: SecretType::HmacSha256,

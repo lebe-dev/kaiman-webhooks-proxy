@@ -139,7 +139,7 @@ impl fmt::Display for WebhookForwardConfig {
 #[serde(rename_all = "kebab-case")]
 pub struct WebhookChannelConfig {
     pub name: String,
-    pub api_read_token: String,
+    pub api_read_token: Option<String>,
     pub webhook_secret: Option<String>,
     pub secret_header: Option<String>,
     #[serde(default)]
@@ -339,12 +339,15 @@ impl AppConfig {
     }
 
     pub fn channel_index_by_token(&self, bearer: &str) -> Option<usize> {
+        if bearer.trim().is_empty() {
+            return None;
+        }
+
         self.channels.iter().position(|channel| {
             channel
                 .api_read_token
-                .as_bytes()
-                .ct_eq(bearer.as_bytes())
-                .into()
+                .as_deref()
+                .is_some_and(|token| token.as_bytes().ct_eq(bearer.as_bytes()).into())
         })
     }
 
@@ -678,7 +681,7 @@ mod tests {
     fn make_channel(name: &str, max_body_size: Option<usize>) -> WebhookChannelConfig {
         WebhookChannelConfig {
             name: name.to_string(),
-            api_read_token: "token".to_string(),
+            api_read_token: Some("token".to_string()),
             webhook_secret: None,
             secret_header: None,
             secret_type: SecretType::Plain,
@@ -1379,7 +1382,7 @@ backoff:
         forward.sign_template = Some("sha256={{signature}}".to_string());
 
         let mut channel = make_channel_with_forward(forward);
-        channel.api_read_token = "read-token-value".to_string();
+        channel.api_read_token = Some("read-token-value".to_string());
         channel.webhook_secret = Some("webhook-secret-value".to_string());
         channel.secret_extract_template = Some("extract-template-value".to_string());
         channel.secret_sign_template = Some("sign-template-value".to_string());

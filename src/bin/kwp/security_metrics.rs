@@ -33,7 +33,7 @@ mod tests {
     fn make_channel(name: &str) -> WebhookChannelConfig {
         WebhookChannelConfig {
             name: name.to_string(),
-            api_read_token: "tok".to_string(),
+            api_read_token: Some("tok".to_string()),
             webhook_secret: None,
             secret_header: None,
             secret_type: SecretType::Plain,
