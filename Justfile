@@ -49,8 +49,7 @@ run:
     cargo run --bin kwp
 
 test:
-    cargo test --lib
-    cargo test --bin kwp
+    cargo test
 
 # Run the tests instrumented and write an LCOV report for SonarQube
 coverage:
@@ -58,7 +57,7 @@ coverage:
     # Requires `cargo install cargo-llvm-cov` and `rustup component add llvm-tools`.
     set -euo pipefail
     mkdir -p {{ coverageDir }}
-    cargo llvm-cov --lib --bin kwp --lcov --output-path {{ lcovReport }}
+    cargo llvm-cov --lcov --output-path {{ lcovReport }}
     # llvm-cov records absolute host paths; the scanner sees the project mounted
     # at /usr/src and would resolve none of them. Make them project-relative.
     sed -i.bak "s|^SF:$PWD/|SF:|" {{ lcovReport }}

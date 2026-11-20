@@ -274,6 +274,34 @@ mod tests {
     }
 
     #[test]
+    fn test_environment_reference_requires_a_complete_identifier() {
+        for (value, name) in [
+            ("TELEGRAM_TOKEN", "TELEGRAM_TOKEN"),
+            ("_TOKEN_2", "_TOKEN_2"),
+            ("${TOKEN}", "TOKEN"),
+            ("${telegramToken2}", "telegramToken2"),
+        ] {
+            assert_eq!(environment_reference(value), Some(name), "{value:?}");
+        }
+
+        for value in [
+            "",
+            "TOKEN",
+            "telegram_token",
+            "2_TOKEN",
+            "TOKEN_NAME ",
+            "${}",
+            "${2TOKEN}",
+            "${TOKEN-NAME}",
+            "${TÖKEN}",
+            "${TOKEN",
+            "Bearer ${TOKEN}",
+        ] {
+            assert_eq!(environment_reference(value), None, "{value:?}");
+        }
+    }
+
+    #[test]
     fn test_resolve_environment_in_nested_values() {
         let yaml = r#"
 channels:
@@ -281,13 +309,19 @@ channels:
     api-read-token: TELEGRAM_WEBHOOK_API_READ_TOKEN
     webhook-secret: '${secret}'
     note: '$$LITERAL_NOTE'
+    secret-header: '$$${literal_header}'
+    secret-type: '${SECRET_TYPE}'
+    secret-sign-template: '${empty}'
+    max-body-size: '${BODY_LIMIT}'
     monitoring-metrics: '${METRICS}'
     allowed-ips: ['${allowedIp}']
     forward:
       url: https://example.com/hook
       interval-seconds: '${INTERVAL}'
+      sign-header: null
       backoff:
         multiplier: '${MULTIPLIER}'
+        max-seconds: 900
 "#;
         let mut config = config::Config::builder()
             .add_source(config::File::from_str(yaml, config::FileFormat::Yaml))
@@ -296,6 +330,9 @@ channels:
         let vars = std::collections::HashMap::from([
             ("TELEGRAM_WEBHOOK_API_READ_TOKEN", "000123"),
             ("secret", "line: one # \"quoted\"\n${UNRESOLVED}\n"),
+            ("SECRET_TYPE", "hmac-sha256"),
+            ("empty", ""),
+            ("BODY_LIMIT", "1024"),
             ("METRICS", "false"),
             ("allowedIp", "192.0.2.0/24"),
             ("INTERVAL", "30"),
@@ -314,11 +351,23 @@ channels:
         assert_eq!(channel.api_read_token, "000123");
         assert_eq!(channel.webhook_secret.as_deref(), Some(vars["secret"]));
         assert_eq!(channel.note.as_deref(), Some("LITERAL_NOTE"));
+        assert_eq!(channel.secret_header.as_deref(), Some("${literal_header}"));
+        assert_eq!(
+            channel.secret_type,
+            crate::domain::config::model::SecretType::HmacSha256
+        );
+        assert_eq!(channel.secret_sign_template.as_deref(), Some(""));
+        assert_eq!(channel.max_body_size, Some(1024));
         assert!(!channel.monitoring_metrics);
         assert_eq!(channel.allowed_ips.as_deref().unwrap(), ["192.0.2.0/24"]);
         let forward = channel.forward.as_ref().unwrap();
         assert_eq!(forward.interval_seconds, 30);
-        assert_eq!(forward.backoff.as_ref().unwrap().multiplier, Some(1.5));
+        assert_eq!(forward.expected_status, 200);
+        assert_eq!(forward.timeout_seconds, 15);
+        assert_eq!(forward.sign_header, None);
+        let backoff = forward.backoff.as_ref().unwrap();
+        assert_eq!(backoff.multiplier, Some(1.5));
+        assert_eq!(backoff.max_seconds, Some(900));
     }
 
     #[test]
