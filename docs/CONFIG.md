@@ -88,6 +88,30 @@ For local development through Vite, register the UI origin with port `4200`.
 
 The YAML file defines the channels and their security settings.
 
+### Environment references in YAML
+
+Any scalar value can come from an environment variable, including list items,
+booleans, and numbers in nested settings. For example:
+
+```yaml
+channels:
+  - name: telegram
+    api-read-token: TELEGRAM_WEBHOOK_API_READ_TOKEN
+    webhook-secret: '${telegramSecret}'
+    secret-header: X-Telegram-Bot-Api-Secret-Token
+    monitoring-metrics: '${TELEGRAM_METRICS}'
+```
+
+Use `${NAME}` for any variable name made of ASCII letters, digits, and
+underscores, starting with a letter or underscore. Names containing an underscore
+and no lowercase letters can also be written directly. A reference takes up the
+entire scalar. Prefix it with `$$` to use it as literal text, for example
+`'$$TELEGRAM_WEBHOOK_API_READ_TOKEN'`.
+
+The service resolves references at startup and exits with an error if a variable
+is unset or contains invalid UTF-8. String values preserve whitespace and line
+breaks.
+
 ### Channels
 
 The `channels` key contains a list of channel configurations.
