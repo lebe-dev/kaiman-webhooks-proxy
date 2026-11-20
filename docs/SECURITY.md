@@ -10,6 +10,16 @@ This document provides an overview of the security architecture.
   - Request size is limited to 256 KB
 - Project uses [sqlite](https://sqlite.org/) to store data in file `kwp.db`. You can switch it to in memory mode by setting `DATABASE_URL` environment variable to `sqlite::memory:`.
 
+## OAuth sessions
+
+KWP uses a one-time browser-bound state and a PKCE challenge for OAuth sign-in.
+Session cookies are HttpOnly and use Secure on HTTPS. KWP keeps the local session
+in memory and discards provider tokens after sign-in. OAuth cookies are filtered
+out of stored and forwarded webhook headers.
+
+The OAuth callback query carries a short-lived authorization code. KWP omits the
+query from Sentry events. Configure reverse proxy access logs to omit it as well.
+
 ## Error Reporting
 
 Sentry reporting is off unless `SENTRY_DSN` is set. When it is on, events leave the

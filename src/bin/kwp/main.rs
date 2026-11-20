@@ -10,13 +10,13 @@ use axum::{
 };
 use kwp_lib::VERSION;
 use kwp_lib::domain::config::model::AppConfig;
-use kwp_lib::domain::config::ports::AppConfigLoader;
 use kwp_lib::domain::webhook::model::{ChannelForwardStatus, WebhookChannel};
 use kwp_lib::domain::webhook::service::WebhookServiceImpl;
 use kwp_lib::outbound::config::EnvConfigLoader;
 use kwp_lib::outbound::sqlite::Sqlite;
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use route::{
+    auth,
     config::get_config_route,
     delete_webhook::delete_webhook_route,
     list_webhooks::list_webhooks_route,
@@ -39,6 +39,7 @@ pub mod background;
 pub mod http_client;
 pub mod logger;
 pub mod middleware;
+mod oauth;
 pub mod observability;
 // A handler step that can reject the request returns `Result<T, Response>`, and
 // `axum::Response` is 128 bytes — which is exactly what `result_large_err` counts.
@@ -49,9 +50,9 @@ pub mod route;
 pub mod security_metrics;
 pub mod static_files;
 
-#[derive(Clone)]
 pub struct AppState {
     pub config: AppConfig,
+    oauth: Option<oauth::OAuth>,
     pub webhook_service: WebhookServiceImpl<Sqlite>,
     pub metrics_handle: Option<PrometheusHandle>,
     pub http_client: reqwest::Client,
@@ -162,11 +163,8 @@ fn build_router(app_config: &AppConfig) -> Router<Arc<AppState>> {
         log::info!("REST API is disabled (API_ENABLED=0)");
         app = app.route("/api/{*path}", any(|| async { StatusCode::NOT_FOUND }));
     } else {
-        app = app
-            .route("/api/version", get(get_version_route))
+        let mut management = Router::new()
             .route("/api/config", get(get_config_route))
-            .route("/api/webhook/{channel}", post(receive_webhook_route))
-            .route("/api/webhook/{channel}", get(read_webhooks_route))
             .route("/api/webhook/{channel}/list", get(list_webhooks_route))
             .route("/api/webhook/{channel}/{id}", delete(delete_webhook_route))
             .route("/api/webhook/{channel}/sign", post(sign_webhook_route))
@@ -189,6 +187,22 @@ fn build_router(app_config: &AppConfig) -> Router<Arc<AppState>> {
                 post(retry_webhook_route),
             );
 
+        if app_config.ui_enabled {
+            management = management.route("/api/auth/status", get(auth::auth_status));
+            let oauth_routes = Router::new()
+                .route("/api/auth/oauth/start", get(auth::oauth_start))
+                .route(oauth::CALLBACK_PATH, get(auth::oauth_callback))
+                .route("/api/auth/logout", post(auth::oauth_logout))
+                .route_layer(axum::middleware::from_fn(auth::no_referrer));
+            management = management.merge(oauth_routes);
+        }
+        app = app
+            .merge(management.route_layer(axum::middleware::from_fn(auth::no_store)))
+            .route("/api/version", get(get_version_route))
+            .route(
+                "/api/webhook/{channel}",
+                post(receive_webhook_route).get(read_webhooks_route),
+            );
         if app_config.metrics_enabled {
             app = app.route("/api/metrics", get(metrics_route));
         }
@@ -212,8 +226,15 @@ async fn run() -> anyhow::Result<()> {
         log::info!("Sentry error reporting is enabled");
     }
 
-    let config_loader = EnvConfigLoader;
-    let app_config = config_loader.load()?;
+    let oauth = oauth::OAuthConfig::from_env()?
+        .map(oauth::OAuth::new)
+        .transpose()?;
+    let oauth_enabled = oauth.is_some();
+    let app_config = EnvConfigLoader.load_with_ui_token(!oauth_enabled)?;
+    anyhow::ensure!(
+        !oauth_enabled || (app_config.ui_enabled && app_config.api_enabled),
+        "OAuth requires the Web UI and REST API to be enabled"
+    );
     validate_config(&app_config)?;
 
     // Header names carrying secrets are channel-specific, so Sentry has to learn
@@ -251,6 +272,7 @@ async fn run() -> anyhow::Result<()> {
 
     let app_state = Arc::new(AppState {
         config: app_config.clone(),
+        oauth,
         webhook_service,
         metrics_handle,
         http_client: http_client.clone(),

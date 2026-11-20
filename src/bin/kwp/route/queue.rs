@@ -5,49 +5,19 @@ use std::time::Duration;
 use axum::{
     Extension, Json,
     extract::{Path, State},
-    http::{HeaderMap, StatusCode},
+    http::StatusCode,
     response::{IntoResponse, Response},
 };
 use serde::Serialize;
 use serde_json::Value;
 
+use super::auth::ApiAccess;
 use crate::AppState;
 use crate::middleware::request_id::RequestId;
 use kwp_lib::domain::config::model::{WebhookChannelConfig, WebhookForwardConfig};
 use kwp_lib::domain::crypto;
 use kwp_lib::domain::webhook::backoff::{self, FailureKind};
 use kwp_lib::domain::webhook::model::{ChannelForwardStatus, Webhook, WebhookChannel};
-
-fn extract_bearer(headers: &HeaderMap) -> Option<&str> {
-    headers
-        .get("Authorization")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "))
-}
-
-fn authorize_channel(
-    state: &AppState,
-    bearer: &str,
-    channel_name: &str,
-) -> Result<(), (StatusCode, &'static str)> {
-    match state.config.find_channel_by_token(bearer) {
-        Some(c) => {
-            if c.name != channel_name {
-                return Err((StatusCode::FORBIDDEN, "Forbidden"));
-            }
-            Ok(())
-        }
-        None => {
-            if !state.config.is_ui_token(bearer) {
-                return Err((StatusCode::UNAUTHORIZED, "Unauthorized"));
-            }
-            if state.config.find_channel_by_name(channel_name).is_none() {
-                return Err((StatusCode::NOT_FOUND, "Channel not found"));
-            }
-            Ok(())
-        }
-    }
-}
 
 fn now_unix() -> i64 {
     std::time::SystemTime::now()
@@ -79,29 +49,14 @@ pub async fn get_queue_route(
     State(state): State<Arc<AppState>>,
     Extension(request_id): Extension<RequestId>,
     Path(channel_name): Path<String>,
-    headers: HeaderMap,
+    access: ApiAccess,
 ) -> impl IntoResponse {
-    let bearer = match extract_bearer(&headers) {
-        Some(b) => b,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response(),
+    let channel_cfg = match access.channel(&state, &request_id, &channel_name) {
+        Ok(channel) => channel,
+        Err(rejection) => return rejection.into_response(),
     };
 
-    if let Err((status, msg)) = authorize_channel(&state, bearer, &channel_name) {
-        return (status, msg).into_response();
-    }
-
-    // The UI polls this endpoint, and reading the queue changes nothing, so it stays
-    // out of the INFO narrative.
-    log::debug!(
-        "[req:{}] request to get queue for channel: {}",
-        request_id,
-        channel_name
-    );
-
-    let channel_cfg = match state.config.find_channel_by_name(&channel_name) {
-        Some(c) => c,
-        None => return (StatusCode::NOT_FOUND, "Channel not found").into_response(),
-    };
+    log::debug!("[req:{request_id}] request to get queue for channel: {channel_name}");
 
     if channel_cfg.forward.is_none() {
         return (
@@ -175,15 +130,10 @@ pub async fn pause_queue_route(
     State(state): State<Arc<AppState>>,
     Extension(request_id): Extension<RequestId>,
     Path(channel_name): Path<String>,
-    headers: HeaderMap,
+    access: ApiAccess,
 ) -> impl IntoResponse {
-    let bearer = match extract_bearer(&headers) {
-        Some(b) => b,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response(),
-    };
-
-    if let Err((status, msg)) = authorize_channel(&state, bearer, &channel_name) {
-        return (status, msg).into_response();
+    if let Err(rejection) = access.channel(&state, &request_id, &channel_name) {
+        return rejection.into_response();
     }
 
     let mut map = match state.forward_statuses.write() {
@@ -220,15 +170,10 @@ pub async fn resume_queue_route(
     State(state): State<Arc<AppState>>,
     Extension(request_id): Extension<RequestId>,
     Path(channel_name): Path<String>,
-    headers: HeaderMap,
+    access: ApiAccess,
 ) -> impl IntoResponse {
-    let bearer = match extract_bearer(&headers) {
-        Some(b) => b,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response(),
-    };
-
-    if let Err((status, msg)) = authorize_channel(&state, bearer, &channel_name) {
-        return (status, msg).into_response();
+    if let Err(rejection) = access.channel(&state, &request_id, &channel_name) {
+        return rejection.into_response();
     }
 
     let mut map = match state.forward_statuses.write() {
@@ -265,15 +210,10 @@ pub async fn clear_queue_route(
     State(state): State<Arc<AppState>>,
     Extension(request_id): Extension<RequestId>,
     Path(channel_name): Path<String>,
-    headers: HeaderMap,
+    access: ApiAccess,
 ) -> impl IntoResponse {
-    let bearer = match extract_bearer(&headers) {
-        Some(b) => b,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response(),
-    };
-
-    if let Err((status, msg)) = authorize_channel(&state, bearer, &channel_name) {
-        return (status, msg).into_response();
+    if let Err(rejection) = access.channel(&state, &request_id, &channel_name) {
+        return rejection.into_response();
     }
 
     let channel = WebhookChannel::new(channel_name.clone());
@@ -621,14 +561,10 @@ pub async fn retry_webhook_route(
     State(state): State<Arc<AppState>>,
     Extension(request_id): Extension<RequestId>,
     Path((channel_name, webhook_id)): Path<(String, i64)>,
-    headers: HeaderMap,
+    access: ApiAccess,
 ) -> impl IntoResponse {
-    let Some(bearer) = extract_bearer(&headers) else {
-        return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response();
-    };
-
-    if let Err((status, msg)) = authorize_channel(&state, bearer, &channel_name) {
-        return (status, msg).into_response();
+    if let Err(rejection) = access.channel(&state, &request_id, &channel_name) {
+        return rejection.into_response();
     }
 
     log::info!(
@@ -754,6 +690,7 @@ mod tests {
 
         let app_state = Arc::new(AppState {
             config,
+            oauth: None,
             webhook_service,
             metrics_handle: None,
             http_client: crate::http_client::build_http_client().unwrap(),

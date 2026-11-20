@@ -334,9 +334,18 @@ fn validate_forward_signing(
 impl AppConfig {
     /// Constant-time token lookup — for GET (client reads webhooks).
     pub fn find_channel_by_token(&self, bearer: &str) -> Option<&WebhookChannelConfig> {
-        self.channels
-            .iter()
-            .find(|c| c.api_read_token.as_bytes().ct_eq(bearer.as_bytes()).into())
+        self.channel_index_by_token(bearer)
+            .map(|index| &self.channels[index])
+    }
+
+    pub fn channel_index_by_token(&self, bearer: &str) -> Option<usize> {
+        self.channels.iter().position(|channel| {
+            channel
+                .api_read_token
+                .as_bytes()
+                .ct_eq(bearer.as_bytes())
+                .into()
+        })
     }
 
     /// Plain name lookup — for POST (incoming webhook routing).

@@ -8,6 +8,8 @@ These variables can be set in a `.env` file or directly in your environment.
 
 | Variable | Default Value | Description |
 | :--- | :--- | :--- |
+| `AUTH_TYPE` | `token` | Authentication for the Web UI and its API. Set to `oauth` to require OAuth sign-in. |
+| `UI_ACCESS_TOKEN` | Generated at startup | UI Bearer token in token mode. |
 | `BIND_ADDRESS` | `0.0.0.0:8080` | The address and port the server listens on. |
 | `LOG_LEVEL` | `info` | Logging verbosity (e.g., `debug`, `info`, `warn`, `error`). |
 | `LOG_TARGET` | `stdout` | Destination for logs (e.g., `stdout`). |
@@ -19,6 +21,68 @@ These variables can be set in a `.env` file or directly in your environment.
 | `FORWARD_BACKOFF_JITTER` | `0.2` | Fraction the delay is randomly spread by (±20% by default), so channels and replicas do not retry in lockstep. Range `0.0`–`1.0`. |
 | `SENTRY_DSN` | — | Sentry project DSN. Absent or empty disables error reporting. See [MONITORING.md](MONITORING.md#error-reporting-sentry). |
 | `SENTRY_ENVIRONMENT` | `production` | Environment tag attached to Sentry events (`production`, `staging`, …). Only used when `SENTRY_DSN` is set. |
+
+## OAuth sign-in
+
+Set `AUTH_TYPE=oauth` to enable OAuth for the Web UI and its API. The UI and
+REST API must both be enabled. KWP uses Authorization Code with
+PKCE (S256) and fetches a JSON profile using the provider's Bearer token.
+Configure one provider per deployment.
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `OAUTH_PROVIDER_NAME` | `OAuth` | Provider name displayed on the login button. |
+| `OAUTH_CLIENT_ID` | Required | OAuth application ID. |
+| `OAUTH_CLIENT_SECRET` | Required | OAuth application secret. |
+| `OAUTH_AUTHORIZE_URL` | Required | Authorization endpoint. |
+| `OAUTH_TOKEN_URL` | Required | Endpoint that exchanges the authorization code for a token. |
+| `OAUTH_USERINFO_URL` | Required | Endpoint that returns the signed-in user's profile as JSON. |
+| `OAUTH_REDIRECT_URL` | Required | Public UI origin followed by `/api/auth/oauth/callback`. Register this exact URL with the provider. |
+| `OAUTH_SCOPES` | Provider default | Space-separated OAuth scopes. |
+| `OAUTH_USER_ID_POINTER` | `/sub` | JSON Pointer to a stable string or integer account ID in the profile. |
+| `OAUTH_ALLOWED_USER_IDS` | Required | Comma-separated account IDs from the configured provider. Each listed ID grants access to all channels in the Web UI. |
+| `OAUTH_TOKEN_AUTH_METHOD` | `client_secret_post` | Client authentication at the token endpoint. Set to `client_secret_basic` for HTTP Basic. |
+| `OAUTH_SESSION_TTL_SECONDS` | `3600` | Session lifetime in seconds. Range `1` to `86400`. |
+
+Endpoint URLs require HTTPS. HTTP is supported for `localhost`, `127.0.0.1`,
+and `[::1]` in local development. Serve the UI and its API on the origin
+specified by `OAUTH_REDIRECT_URL`, and forward `/api/auth/*` to KWP.
+
+Login attempts and sessions live in memory on each instance. Run one replica,
+or configure sticky routing for the OAuth callback and subsequent UI requests.
+Restarting the instance clears its sessions. Log out to end the KWP session.
+
+OAuth mode requires a session for the Web UI and its API. `UI_ACCESS_TOKEN` is
+ignored. Automated webhook consumers still use their channel Bearer tokens on
+`GET /api/webhook/{channel}`.
+
+In token mode, the UI and its API use Bearer tokens and the OAuth routes are
+disabled.
+
+### GitLab example
+
+[Create a confidential GitLab OAuth application](https://docs.gitlab.com/integration/oauth_provider/)
+with the `read_user` scope. Set its redirect URI to the exact value of
+`OAUTH_REDIRECT_URL`. The allowlist uses numeric GitLab user IDs from the
+[Users API](https://docs.gitlab.com/api/users/#retrieve-the-current-user).
+
+```dotenv
+AUTH_TYPE=oauth
+OAUTH_PROVIDER_NAME=GitLab
+OAUTH_CLIENT_ID=your-application-id
+OAUTH_CLIENT_SECRET=your-application-secret
+OAUTH_AUTHORIZE_URL=https://gitlab.example.com/oauth/authorize
+OAUTH_TOKEN_URL=https://gitlab.example.com/oauth/token
+OAUTH_USERINFO_URL=https://gitlab.example.com/api/v4/user
+OAUTH_REDIRECT_URL=https://webhooks.example.com/api/auth/oauth/callback
+OAUTH_SCOPES=read_user
+OAUTH_USER_ID_POINTER=/id
+OAUTH_ALLOWED_USER_IDS=42,9001
+```
+
+With Docker Compose, put these variables in `.env`. With Helm, put
+`OAUTH_CLIENT_SECRET` under `secrets.envs` and the other variables under `envs`.
+For local development through Vite, register the UI origin with port `4200`.
 
 ## YAML Configuration (`config.yml`)
 

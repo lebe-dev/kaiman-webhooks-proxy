@@ -17,7 +17,6 @@
     import { FishingHook, Bug, ListOrdered, LogOut, Info } from "@lucide/svelte";
     import { Button } from "$lib/components/ui/button/index.js";
     import { fetchConfig, type AppConfigResponse } from "$lib/api";
-    import { clearToken } from "$lib/auth";
     import { version } from "../../package.json";
     import ThemeToggler from "./ThemeToggler.svelte";
 
@@ -66,11 +65,6 @@
         }
     });
 
-    function logout() {
-        clearToken();
-        window.location.reload();
-    }
-
     function copyToDebug(payload: string) {
         debugPayload = payload;
         activeTab = "debug";
@@ -81,6 +75,7 @@
 <Toaster />
 <TooltipProvider delayDuration={200}>
 <TokenGate>
+    {#snippet children(logout)}
     <div class="p-6 max-w-5xl mx-auto">
             <div class="flex items-center justify-between mb-6">
                 <h1 class="text-xl font-semibold">
@@ -202,5 +197,6 @@
                 </a>
             </footer>
         </div>
+    {/snippet}
 </TokenGate>
 </TooltipProvider>

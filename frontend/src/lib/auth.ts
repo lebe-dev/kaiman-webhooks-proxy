@@ -15,6 +15,17 @@ export function clearToken(): void {
   document.cookie = `${TOKEN_COOKIE}=; path=/; max-age=0`;
 }
 
-export function isAuthenticated(): boolean {
-  return getToken() !== null;
+export type AuthStatus =
+  | { authType: "token" }
+  | { authType: "oauth"; provider: string; authenticated: boolean };
+
+export async function fetchAuthStatus(): Promise<AuthStatus> {
+  const res = await fetch("/api/auth/status");
+  if (!res.ok) throw new Error("Failed to check login status");
+  return res.json();
+}
+
+export async function logoutOAuth(): Promise<void> {
+  const res = await fetch("/api/auth/logout", { method: "POST" });
+  if (!res.ok) throw new Error("Failed to log out");
 }

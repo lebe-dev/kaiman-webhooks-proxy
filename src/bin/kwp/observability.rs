@@ -243,6 +243,9 @@ fn configured_sensitive_headers() -> &'static [String] {
 /// (`/api/webhook/x`), so the authority is taken from the `Host` header.
 fn absolute_url(uri: &Uri, headers: &HeaderMap) -> Option<String> {
     let mut parts = uri.clone().into_parts();
+    if uri.path() == crate::oauth::CALLBACK_PATH {
+        parts.path_and_query = Some(uri::PathAndQuery::from_static(crate::oauth::CALLBACK_PATH));
+    }
 
     parts.scheme.get_or_insert(uri::Scheme::HTTP);
 

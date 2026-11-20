@@ -4,11 +4,12 @@ use std::time::Duration;
 use axum::{
     Extension, Json,
     extract::{Path, State},
-    http::{HeaderMap, StatusCode},
+    http::StatusCode,
     response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
 
+use super::auth::ApiAccess;
 use crate::AppState;
 use crate::middleware::request_id::RequestId;
 use kwp_lib::domain::config::model::{WebhookChannelConfig, WebhookForwardConfig};
@@ -24,56 +25,6 @@ pub struct TestSendRequest {
 pub struct TestSendResponse {
     pub status: u16,
     pub body: String,
-}
-
-/// Resolves the channel this request is allowed to test-send to.
-///
-/// A channel token may only reach its own channel; the UI token may reach any
-/// configured one. Rejections are warnings here as everywhere else: an operator
-/// watching INFO has to see that someone is being turned away from this endpoint.
-fn authorize_test_send<'a>(
-    state: &'a AppState,
-    request_id: &RequestId,
-    channel_name: &str,
-    headers: &HeaderMap,
-) -> Result<&'a WebhookChannelConfig, Response> {
-    let bearer = headers
-        .get("Authorization")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "));
-
-    let Some(bearer) = bearer else {
-        log::warn!(
-            "[req:{request_id}] missing or invalid Authorization header for test-send on channel: {channel_name}"
-        );
-        return Err((StatusCode::UNAUTHORIZED, "Unauthorized").into_response());
-    };
-
-    if let Some(channel_config) = state.config.find_channel_by_token(bearer) {
-        if channel_config.name != channel_name {
-            log::warn!(
-                "[req:{}] token for channel '{}' used to test-send for channel '{}'",
-                request_id,
-                channel_config.name,
-                channel_name
-            );
-            return Err((StatusCode::FORBIDDEN, "Forbidden").into_response());
-        }
-        return Ok(channel_config);
-    }
-
-    if !state.config.is_ui_token(bearer) {
-        log::warn!("[req:{request_id}] invalid token for test-send on channel: {channel_name}");
-        return Err((StatusCode::UNAUTHORIZED, "Unauthorized").into_response());
-    }
-
-    state
-        .config
-        .find_channel_by_name(channel_name)
-        .ok_or_else(|| {
-            log::warn!("[req:{request_id}] test-send requested for unknown channel: {channel_name}");
-            (StatusCode::NOT_FOUND, "Channel not found").into_response()
-        })
 }
 
 /// Builds the value of the signature header for a test send.
@@ -139,12 +90,12 @@ pub async fn test_send_route(
     State(state): State<Arc<AppState>>,
     Extension(request_id): Extension<RequestId>,
     Path(channel_name): Path<String>,
-    headers: HeaderMap,
+    access: ApiAccess,
     Json(req): Json<TestSendRequest>,
 ) -> impl IntoResponse {
-    let channel_config = match authorize_test_send(&state, &request_id, &channel_name, &headers) {
+    let channel_config = match access.channel(&state, &request_id, &channel_name) {
         Ok(channel_config) => channel_config,
-        Err(response) => return response,
+        Err(rejection) => return rejection.into_response(),
     };
 
     log::info!(

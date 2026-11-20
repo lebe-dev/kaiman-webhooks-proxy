@@ -6,6 +6,14 @@ Kaiman Webhooks Proxy provides two primary endpoints for each channel, both loca
 
 By default, the server runs on `http://0.0.0.0:8080`.
 
+## Authentication
+
+With `AUTH_TYPE=token`, the Web UI and its API use Bearer tokens. With
+`AUTH_TYPE=oauth`, the configuration, list, debug, deletion, and queue endpoints
+require an OAuth session cookie. Requests that change data must carry the UI
+origin. The read-and-delete endpoint below uses channel Bearer tokens in both
+modes.
+
 ## Endpoints
 
 ### 1. Receive Webhook
@@ -36,7 +44,7 @@ Used by your local application or scripts to retrieve pending webhooks for a spe
 *   **Path Parameters:**
     *   `channel_name`: The name of the channel.
 *   **Headers:**
-    *   `Authorization: Bearer <token>`: The `token` configured for this channel in `config.yml`.
+    *   `Authorization: Bearer <token>`: The `api-read-token` configured for this channel in `config.yml`.
 *   **Authentication:** Bearer Token.
 *   **Response:**
     *   `200 OK`: Returns a JSON array of webhooks. **Note:** Webhooks are deleted from the proxy immediately after being successfully returned in this call.

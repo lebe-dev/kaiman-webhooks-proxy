@@ -38,6 +38,15 @@ pub struct EnvConfigLoader;
 
 impl AppConfigLoader for EnvConfigLoader {
     fn load(&self) -> Result<AppConfig, LoadAppConfigError> {
+        self.load_with_ui_token(true)
+    }
+}
+
+impl EnvConfigLoader {
+    pub fn load_with_ui_token(
+        &self,
+        ui_token_enabled: bool,
+    ) -> Result<AppConfig, LoadAppConfigError> {
         let bind = env::var("BIND_ADDRESS").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
 
         let (log_level, log_target) = log_settings_from_env();
@@ -109,20 +118,17 @@ impl AppConfigLoader for EnvConfigLoader {
         let ui_enabled = !matches!(env::var("UI_ENABLED").as_deref(), Ok("0") | Ok("false"));
         let api_enabled = !matches!(env::var("API_ENABLED").as_deref(), Ok("0") | Ok("false"));
 
-        let ui_access_token = match env::var("UI_ACCESS_TOKEN") {
-            Ok(token) => token,
-            Err(_) => {
+        let ui_access_token = ui_token_enabled.then(|| {
+            env::var("UI_ACCESS_TOKEN").unwrap_or_else(|_| {
                 let generated = uuid::Uuid::new_v4().to_string();
                 log::warn!(
-                    "UI_ACCESS_TOKEN is not set — generated a temporary token for this session"
+                    "UI_ACCESS_TOKEN is not set, generated a temporary token for this session"
                 );
-                // Deliberately printed rather than logged: the token is a credential,
-                // and `warn!` records become Sentry breadcrumbs that would carry it
-                // off the host with the next reported error.
+                // Sentry captures warning logs as breadcrumbs, so print the token directly.
                 println!("UI_ACCESS_TOKEN={generated}");
                 generated
-            }
-        };
+            })
+        });
 
         Ok(AppConfig {
             bind,
@@ -135,7 +141,7 @@ impl AppConfigLoader for EnvConfigLoader {
             ignored_headers,
             metrics_enabled,
             trusted_proxies,
-            ui_access_token: Some(ui_access_token),
+            ui_access_token,
             ui_enabled,
             api_enabled,
             forward_backoff,

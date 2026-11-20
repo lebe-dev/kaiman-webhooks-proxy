@@ -1,6 +1,7 @@
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 
+pub mod auth;
 pub mod config;
 pub mod delete_webhook;
 pub mod list_webhooks;

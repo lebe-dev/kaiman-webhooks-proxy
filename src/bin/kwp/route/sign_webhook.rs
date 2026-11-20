@@ -4,11 +4,12 @@ use axum::{
     Extension, Json,
     body::Bytes,
     extract::{Path, State},
-    http::{HeaderMap, StatusCode},
+    http::StatusCode,
     response::IntoResponse,
 };
 use serde::Serialize;
 
+use super::auth::ApiAccess;
 use crate::AppState;
 use crate::middleware::request_id::RequestId;
 use kwp_lib::domain::config::model::SecretType;
@@ -25,53 +26,12 @@ pub async fn sign_webhook_route(
     State(state): State<Arc<AppState>>,
     Extension(request_id): Extension<RequestId>,
     Path(channel_name): Path<String>,
-    headers: HeaderMap,
+    access: ApiAccess,
     body: Bytes,
 ) -> impl IntoResponse {
-    let bearer = headers
-        .get("Authorization")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "));
-
-    let bearer = match bearer {
-        Some(b) => b,
-        None => {
-            log::warn!(
-                "[req:{}] missing or invalid Authorization header for sign request on channel: {}",
-                request_id,
-                channel_name
-            );
-            return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response();
-        }
-    };
-
-    let channel_config = match state.config.find_channel_by_token(bearer) {
-        Some(c) => {
-            if c.name != channel_name {
-                log::warn!(
-                    "[req:{}] token for channel '{}' used to sign for channel '{}'",
-                    request_id,
-                    c.name,
-                    channel_name
-                );
-                return (StatusCode::FORBIDDEN, "Forbidden").into_response();
-            }
-            c
-        }
-        None => {
-            if !state.config.is_ui_token(bearer) {
-                log::warn!(
-                    "[req:{}] invalid token for sign request on channel: {}",
-                    request_id,
-                    channel_name
-                );
-                return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response();
-            }
-            match state.config.find_channel_by_name(&channel_name) {
-                Some(c) => c,
-                None => return (StatusCode::NOT_FOUND, "Channel not found").into_response(),
-            }
-        }
+    let channel_config = match access.channel(&state, &request_id, &channel_name) {
+        Ok(channel) => channel,
+        Err(rejection) => return rejection.into_response(),
     };
 
     if channel_config.secret_type != SecretType::HmacSha256 {
@@ -205,6 +165,7 @@ mod tests {
         let db = Sqlite::new("sqlite::memory:").await.unwrap();
         let state = Arc::new(AppState {
             config,
+            oauth: None,
             webhook_service: WebhookServiceImpl::new(db),
             metrics_handle: None,
             http_client: crate::http_client::build_http_client().unwrap(),

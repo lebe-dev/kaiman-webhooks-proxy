@@ -247,7 +247,13 @@ pub async fn receive_webhook_route(
             if state.config.ignored_headers.contains(&key) {
                 return None;
             }
-            v.to_str().ok().map(|val| (key, val.to_string()))
+            let value = v.to_str().ok()?;
+            let value = if key == "cookie" && state.oauth.is_some() {
+                super::auth::strip_oauth_cookies(value)?
+            } else {
+                value.to_owned()
+            };
+            Some((key, value))
         })
         .collect();
 
@@ -437,6 +443,7 @@ mod tests {
         };
         let state = Arc::new(AppState {
             config,
+            oauth: None,
             webhook_service: WebhookServiceImpl::new(db),
             metrics_handle: None,
             http_client: crate::http_client::build_http_client().unwrap(),

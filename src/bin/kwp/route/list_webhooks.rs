@@ -4,12 +4,13 @@ use std::sync::Arc;
 use axum::{
     Extension, Json,
     extract::{Path, State},
-    http::{HeaderMap, StatusCode},
+    http::StatusCode,
     response::IntoResponse,
 };
 use serde::Serialize;
 use serde_json::Value;
 
+use super::auth::ApiAccess;
 use crate::AppState;
 use crate::middleware::request_id::RequestId;
 use kwp_lib::domain::webhook::model::WebhookChannel;
@@ -26,51 +27,11 @@ pub async fn list_webhooks_route(
     State(state): State<Arc<AppState>>,
     Extension(request_id): Extension<RequestId>,
     Path(channel_name): Path<String>,
-    headers: HeaderMap,
+    access: ApiAccess,
 ) -> impl IntoResponse {
-    let bearer = headers
-        .get("Authorization")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "));
-
-    let bearer = match bearer {
-        Some(b) => b,
-        None => {
-            log::warn!(
-                "[req:{}] missing or invalid Authorization header for list on channel: {}",
-                request_id,
-                channel_name
-            );
-            return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response();
-        }
-    };
-
-    match state.config.find_channel_by_token(bearer) {
-        Some(c) => {
-            if c.name != channel_name {
-                log::warn!(
-                    "[req:{}] token for channel '{}' used to list channel '{}'",
-                    request_id,
-                    c.name,
-                    channel_name
-                );
-                return (StatusCode::FORBIDDEN, "Forbidden").into_response();
-            }
-        }
-        None => {
-            if !state.config.is_ui_token(bearer) {
-                log::warn!(
-                    "[req:{}] invalid token for list request on channel: {}",
-                    request_id,
-                    channel_name
-                );
-                return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response();
-            }
-            if state.config.find_channel_by_name(&channel_name).is_none() {
-                return (StatusCode::NOT_FOUND, "Channel not found").into_response();
-            }
-        }
-    };
+    if let Err(rejection) = access.channel(&state, &request_id, &channel_name) {
+        return rejection.into_response();
+    }
 
     let channel = WebhookChannel::new(channel_name.clone());
 
