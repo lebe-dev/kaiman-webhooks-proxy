@@ -11,3 +11,5 @@
 /static
 /coverage
 /.scannerwork
+
+.DS_Store
