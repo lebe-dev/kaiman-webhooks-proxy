@@ -48,6 +48,21 @@ impl EnvConfigLoader {
         &self,
         ui_token_enabled: bool,
     ) -> Result<AppConfig, LoadAppConfigError> {
+        let ui_access_token = if ui_token_enabled {
+            let token = env::var("UI_ACCESS_TOKEN")
+                .ok()
+                .filter(|token| !token.trim().is_empty())
+                .ok_or_else(|| {
+                    let message =
+                        "UI_ACCESS_TOKEN must be set to a non-blank value when AUTH_TYPE=token";
+                    log::error!("{message}");
+                    anyhow::anyhow!(message)
+                })?;
+            Some(token)
+        } else {
+            None
+        };
+
         let bind = env::var("BIND_ADDRESS").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
 
         let (log_level, log_target) = log_settings_from_env();
@@ -118,18 +133,6 @@ impl EnvConfigLoader {
 
         let ui_enabled = !matches!(env::var("UI_ENABLED").as_deref(), Ok("0") | Ok("false"));
         let api_enabled = !matches!(env::var("API_ENABLED").as_deref(), Ok("0") | Ok("false"));
-
-        let ui_access_token = ui_token_enabled.then(|| {
-            env::var("UI_ACCESS_TOKEN").unwrap_or_else(|_| {
-                let generated = uuid::Uuid::new_v4().to_string();
-                log::warn!(
-                    "UI_ACCESS_TOKEN is not set, generated a temporary token for this session"
-                );
-                // Sentry captures warning logs as breadcrumbs, so print the token directly.
-                println!("UI_ACCESS_TOKEN={generated}");
-                generated
-            })
-        });
 
         Ok(AppConfig {
             bind,
@@ -398,6 +401,7 @@ channels:
             env::set_var("DATABASE_URL", "sqlite:test.db");
             env::set_var("CONFIG_FILE", test_config_path());
             env::set_var("IGNORED_HEADERS", "host,content-length");
+            env::set_var("UI_ACCESS_TOKEN", "test-ui-token");
 
             // Clean up optional vars to test defaults
             env::remove_var("BIND_ADDRESS");
@@ -409,6 +413,7 @@ channels:
         let loader = EnvConfigLoader;
         let config = loader.load().unwrap();
 
+        assert_eq!(config.ui_access_token.as_deref(), Some("test-ui-token"));
         assert_eq!(config.db_cnn, "sqlite:test.db");
         assert_eq!(config.bind, "0.0.0.0:8080"); // default
         assert!(!config.channels.is_empty());
@@ -418,6 +423,7 @@ channels:
             env::remove_var("DATABASE_URL");
             env::remove_var("CONFIG_FILE");
             env::remove_var("IGNORED_HEADERS");
+            env::remove_var("UI_ACCESS_TOKEN");
         }
     }
 
@@ -435,7 +441,7 @@ channels:
         }
 
         let loader = EnvConfigLoader;
-        let config = loader.load().unwrap();
+        let config = loader.load_with_ui_token(false).unwrap();
 
         assert_eq!(config.bind, "127.0.0.1:9000");
         assert_eq!(config.log_level, "debug");
@@ -465,13 +471,13 @@ channels:
 
         let loader = EnvConfigLoader;
         // Missing DATABASE_URL is checked first
-        assert!(loader.load().is_err());
+        assert!(loader.load_with_ui_token(false).is_err());
 
         unsafe {
             env::set_var("DATABASE_URL", "sqlite:test.db");
         }
         // Now config file doesn't exist
-        assert!(loader.load().is_err());
+        assert!(loader.load_with_ui_token(false).is_err());
 
         unsafe {
             env::remove_var("DATABASE_URL");
@@ -488,7 +494,7 @@ channels:
         }
 
         let loader = EnvConfigLoader;
-        assert!(loader.load().is_err());
+        assert!(loader.load_with_ui_token(false).is_err());
 
         unsafe {
             env::remove_var("DATABASE_URL");
@@ -510,7 +516,7 @@ channels:
         }
 
         let loader = EnvConfigLoader;
-        assert!(loader.load().is_err());
+        assert!(loader.load_with_ui_token(false).is_err());
 
         unsafe {
             env::remove_var("DATABASE_URL");
@@ -529,7 +535,7 @@ channels:
         }
 
         let loader = EnvConfigLoader;
-        let config = loader.load().unwrap();
+        let config = loader.load_with_ui_token(false).unwrap();
         assert_eq!(config.default_body_limit, 262_144);
 
         unsafe {
@@ -550,7 +556,7 @@ channels:
         }
 
         let loader = EnvConfigLoader;
-        let config = loader.load().unwrap();
+        let config = loader.load_with_ui_token(false).unwrap();
         assert_eq!(config.default_body_limit, 524_288);
 
         unsafe {
@@ -572,7 +578,7 @@ channels:
         }
 
         let loader = EnvConfigLoader;
-        let config = loader.load().unwrap();
+        let config = loader.load_with_ui_token(false).unwrap();
         assert_eq!(config.default_body_limit, 262_144);
 
         unsafe {
@@ -594,7 +600,7 @@ channels:
 
         let loader = EnvConfigLoader;
         // Should fail because IGNORED_HEADERS is required
-        assert!(loader.load().is_err());
+        assert!(loader.load_with_ui_token(false).is_err());
 
         unsafe {
             env::remove_var("DATABASE_URL");
@@ -612,7 +618,7 @@ channels:
         }
 
         let loader = EnvConfigLoader;
-        let config = loader.load().unwrap();
+        let config = loader.load_with_ui_token(false).unwrap();
         assert!(
             config
                 .ignored_headers
@@ -638,7 +644,7 @@ channels:
         }
 
         let loader = EnvConfigLoader;
-        let config = loader.load().unwrap();
+        let config = loader.load_with_ui_token(false).unwrap();
         // Should be lowercased
         assert!(
             config
@@ -665,7 +671,7 @@ channels:
         }
 
         let loader = EnvConfigLoader;
-        let config = loader.load().unwrap();
+        let config = loader.load_with_ui_token(false).unwrap();
         let host_count = config
             .ignored_headers
             .iter()
@@ -692,7 +698,7 @@ channels:
             env::remove_var("FORWARD_BACKOFF_JITTER");
         }
 
-        let config = EnvConfigLoader.load().unwrap();
+        let config = EnvConfigLoader.load_with_ui_token(false).unwrap();
 
         assert_eq!(config.forward_backoff, ForwardBackoffDefaults::default());
 
@@ -715,7 +721,7 @@ channels:
             env::set_var("FORWARD_BACKOFF_JITTER", "0.05");
         }
 
-        let config = EnvConfigLoader.load().unwrap();
+        let config = EnvConfigLoader.load_with_ui_token(false).unwrap();
 
         assert_eq!(config.forward_backoff.multiplier, 1.5);
         assert_eq!(config.forward_backoff.max_seconds, 900);
@@ -745,7 +751,7 @@ channels:
             env::set_var("FORWARD_BACKOFF_MAX_SECONDS", "an hour");
         }
 
-        let config = EnvConfigLoader.load().unwrap();
+        let config = EnvConfigLoader.load_with_ui_token(false).unwrap();
         let defaults = ForwardBackoffDefaults::default();
 
         assert_eq!(config.forward_backoff.multiplier, defaults.multiplier);
@@ -770,7 +776,7 @@ channels:
         }
 
         let loader = EnvConfigLoader;
-        let config = loader.load().unwrap();
+        let config = loader.load_with_ui_token(false).unwrap();
         let mut sorted = config.ignored_headers.clone();
         sorted.sort();
         assert_eq!(config.ignored_headers, sorted);

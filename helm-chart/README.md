@@ -9,8 +9,11 @@ helm repo add tinyops https://tinyops.ru/helm-charts/
 helm repo update
 
 helm upgrade --install --create-namespace -n kaiman-webhooks-proxy \
-  kaiman-webhooks-proxy tinyops/kaiman-webhooks-proxy --version 1.2.0
+  kaiman-webhooks-proxy tinyops/kaiman-webhooks-proxy --version 1.2.0 -f values.yaml
 ```
+
+For token mode, supply a non-blank `UI_ACCESS_TOKEN` through
+`secrets.envs.UI_ACCESS_TOKEN` or `secrets.existingSecret`.
 
 ## Configuration
 
@@ -114,7 +117,7 @@ appears in multiple sources, the existing Secret takes precedence, followed by
 | `secrets.annotations` | Annotations applied to the chart-managed Secret | `{}` |
 | `secrets.envs` | Map of secret env vars injected into the container via `envFrom.secretRef`. Keys are exact env var names | `{}` |
 | `secrets.existingSecret` | Name of an existing Secret in the release namespace whose keys become environment variables | `""` |
-| `secrets.envs.UI_ACCESS_TOKEN` | Bearer token used in token mode | _(unset)_ |
+| `secrets.envs.UI_ACCESS_TOKEN` | Bearer token required at startup in token mode | _(unset)_ |
 | `secrets.envs.OAUTH_CLIENT_SECRET` | Client secret required in OAuth mode. It can also come from `secrets.existingSecret` | _(unset)_ |
 | `secrets.envs.SENTRY_DSN` | Sentry project DSN. Leave unset to disable error reporting. See [MONITORING.md](../docs/MONITORING.md#error-reporting-sentry) | _(unset)_ |
 

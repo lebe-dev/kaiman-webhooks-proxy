@@ -235,7 +235,7 @@ secrets:
   # -- Secret environment variables injected into the container via envFrom.secretRef.
   # Keys are exact env var names. Values are stored as stringData in the chart-managed Secret.
   envs: {}
-    # Token mode only.
+    # Required in token mode. Can also be supplied by secrets.existingSecret.
     # UI_ACCESS_TOKEN: "change-me"
     # OAuth mode only. Can also be supplied by secrets.existingSecret.
     # OAUTH_CLIENT_SECRET: "your-application-secret"

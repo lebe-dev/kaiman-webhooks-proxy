@@ -9,7 +9,7 @@ These variables can be set in a `.env` file or directly in your environment.
 | Variable | Default Value | Description |
 | :--- | :--- | :--- |
 | `AUTH_TYPE` | `token` | Authentication for the Web UI and its API. Set to `oauth` to require OAuth sign-in. |
-| `UI_ACCESS_TOKEN` | Generated at startup | UI Bearer token in token mode. |
+| `UI_ACCESS_TOKEN` | Required in token mode | UI Bearer token. Startup fails in token mode if the value is missing or contains only whitespace. |
 | `BIND_ADDRESS` | `0.0.0.0:8080` | The address and port the server listens on. |
 | `LOG_LEVEL` | `info` | Logging verbosity (e.g., `debug`, `info`, `warn`, `error`). |
 | `LOG_TARGET` | `stdout` | Destination for logs (e.g., `stdout`). |

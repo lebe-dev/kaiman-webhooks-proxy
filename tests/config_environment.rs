@@ -44,6 +44,33 @@ async fn startup_error(command: &mut Command) -> String {
 }
 
 #[tokio::test]
+async fn token_mode_rejects_missing_and_blank_ui_access_tokens() {
+    let dir = TempDir::new().unwrap();
+    for mode in [None, Some("token")] {
+        for token in [None, Some(""), Some(" \t\u{a0} ")] {
+            let mut command = kwp(&dir, "channels: []");
+            command.env("LOG_LEVEL", "error");
+            if let Some(mode) = mode {
+                command.env("AUTH_TYPE", mode);
+            }
+            match token {
+                Some(token) => command.env("UI_ACCESS_TOKEN", token),
+                None => command.env_remove("UI_ACCESS_TOKEN"),
+            };
+
+            let error = startup_error(&mut command).await;
+            assert!(
+                error.lines().any(|line| line.contains(" - ERROR - ")
+                    && line.contains(
+                        "UI_ACCESS_TOKEN must be set to a non-blank value when AUTH_TYPE=token"
+                    )),
+                "{error}"
+            );
+        }
+    }
+}
+
+#[tokio::test]
 async fn starts_with_references_from_the_environment_and_dotenv() {
     let dir = TempDir::new().unwrap();
     fs::write(dir.path().join(".env"), "TELEGRAM_METRICS=false\n").unwrap();
