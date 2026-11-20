@@ -31,8 +31,47 @@ Values under `envs` are injected via a ConfigMap. Keys are exact environment var
 | `envs.METRICS_ENABLED` | Enable Prometheus metrics | `0` |
 | `envs.UI_ENABLED` | Enable the embedded web UI | `1` |
 | `envs.API_ENABLED` | Enable the REST API | `1` |
+| `envs.AUTH_TYPE` | Authentication mode for the Web UI and its API (`token` or `oauth`) | `token` |
 | `envs.TRUSTED_PROXIES` | Comma-separated list of trusted reverse proxy IPs/CIDRs. When set, `X-Forwarded-For`/`X-Real-IP` headers are used for client IP resolution. Leave unset to always use the direct connection IP (safe default) | _(unset)_ |
 | `envs.SENTRY_ENVIRONMENT` | Environment tag on Sentry events. Only used when `secrets.envs.SENTRY_DSN` is set | _(unset)_ |
+
+### OAuth with GitLab
+
+Register a confidential OAuth application with the `read_user` scope and the
+exact redirect URL shown in `OAUTH_REDIRECT_URL`. Create the Secret
+`kwp-oauth` in the release namespace with a key named `OAUTH_CLIENT_SECRET`.
+You can also set `secrets.envs.OAUTH_CLIENT_SECRET` to use the chart-managed Secret.
+
+```yaml
+envs:
+  AUTH_TYPE: "oauth"
+  OAUTH_PROVIDER_NAME: "GitLab"
+  OAUTH_CLIENT_ID: "your-application-id"
+  OAUTH_AUTHORIZE_URL: "https://gitlab.example.com/oauth/authorize"
+  OAUTH_TOKEN_URL: "https://gitlab.example.com/oauth/token"
+  OAUTH_USERINFO_URL: "https://gitlab.example.com/api/v4/user"
+  OAUTH_REDIRECT_URL: "https://webhooks.example.com/api/auth/oauth/callback"
+  OAUTH_SCOPES: "read_user"
+  OAUTH_USER_ID_POINTER: "/id"
+  OAUTH_ALLOWED_USER_IDS: "42,9001"
+
+secrets:
+  existingSecret: kwp-oauth
+
+ingressFrontend:
+  enabled: true
+  hosts:
+    - host: webhooks.example.com
+  tls:
+    - secretName: webhooks-tls
+      hosts:
+        - webhooks.example.com
+```
+
+Keep `UI_ENABLED` and `API_ENABLED` enabled. The frontend Ingress serves the UI
+and callback on the same HTTPS origin. The default single replica keeps login
+attempts and sessions on the same pod. See the full
+[OAuth configuration reference](../docs/CONFIG.md#oauth-sign-in) for provider options.
 
 ### Channels Config (`.config`)
 
@@ -75,7 +114,8 @@ appears in multiple sources, the existing Secret takes precedence, followed by
 | `secrets.annotations` | Annotations applied to the chart-managed Secret | `{}` |
 | `secrets.envs` | Map of secret env vars injected into the container via `envFrom.secretRef`. Keys are exact env var names | `{}` |
 | `secrets.existingSecret` | Name of an existing Secret in the release namespace whose keys become environment variables | `""` |
-| `secrets.envs.UI_ACCESS_TOKEN` | Token required to access the embedded web UI | _(unset)_ |
+| `secrets.envs.UI_ACCESS_TOKEN` | Bearer token used in token mode | _(unset)_ |
+| `secrets.envs.OAUTH_CLIENT_SECRET` | Client secret required in OAuth mode. It can also come from `secrets.existingSecret` | _(unset)_ |
 | `secrets.envs.SENTRY_DSN` | Sentry project DSN. Leave unset to disable error reporting. See [MONITORING.md](../docs/MONITORING.md#error-reporting-sentry) | _(unset)_ |
 
 ### Persistence (`.persistence`)

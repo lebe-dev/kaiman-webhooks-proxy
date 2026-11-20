@@ -29,3 +29,5 @@ annotations:
       description: Support mounting channel configuration from a ConfigMap with environment variable references for sensitive values
     - kind: added
       description: Support importing environment variables from an existing Kubernetes Secret
+    - kind: added
+      description: Document OAuth sign-in and expose the authentication mode in chart values

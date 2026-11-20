@@ -197,6 +197,20 @@ envs:
   UI_ENABLED: "1"
   # Set to "0" to disable the REST API
   API_ENABLED: "1"
+  # Authentication for the Web UI and its API. Set to "oauth" to require OAuth.
+  AUTH_TYPE: "token"
+  # OAuth provider settings. Set OAUTH_CLIENT_SECRET through secrets.envs or secrets.existingSecret.
+  # OAUTH_PROVIDER_NAME: "GitLab"
+  # OAUTH_CLIENT_ID: "your-application-id"
+  # OAUTH_AUTHORIZE_URL: "https://gitlab.example.com/oauth/authorize"
+  # OAUTH_TOKEN_URL: "https://gitlab.example.com/oauth/token"
+  # OAUTH_USERINFO_URL: "https://gitlab.example.com/api/v4/user"
+  # OAUTH_REDIRECT_URL: "https://webhooks.example.com/api/auth/oauth/callback"
+  # OAUTH_SCOPES: "read_user"
+  # OAUTH_USER_ID_POINTER: "/id"
+  # OAUTH_ALLOWED_USER_IDS: "42,9001"
+  # OAUTH_TOKEN_AUTH_METHOD: "client_secret_post"
+  # OAUTH_SESSION_TTL_SECONDS: "3600"
   # Trusted reverse proxy IPs/CIDRs (comma-separated). Leave unset to use direct connection IP.
   # TRUSTED_PROXIES: "10.0.0.0/8,172.16.0.0/12"
   # Environment tag for Sentry events. Only used when secrets.envs.SENTRY_DSN is set.
@@ -221,7 +235,10 @@ secrets:
   # -- Secret environment variables injected into the container via envFrom.secretRef.
   # Keys are exact env var names. Values are stored as stringData in the chart-managed Secret.
   envs: {}
+    # Token mode only.
     # UI_ACCESS_TOKEN: "change-me"
+    # OAuth mode only. Can also be supplied by secrets.existingSecret.
+    # OAUTH_CLIENT_SECRET: "your-application-secret"
     # Sentry DSN. Leave unset to disable error reporting. See docs/MONITORING.md.
     # SENTRY_DSN: "https://key@sentry.example.com/1"
 
