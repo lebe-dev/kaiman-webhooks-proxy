@@ -11,6 +11,15 @@ spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
+  strategy:
+    type: {{ .Values.strategy.type }}
+    {{- if eq .Values.strategy.type "Recreate" }}
+    {{- /* Clear the API-defaulted rollingUpdate fields on upgrade. */}}
+    rollingUpdate: null
+    {{- else if .Values.strategy.rollingUpdate }}
+    rollingUpdate:
+      {{- toYaml .Values.strategy.rollingUpdate | nindent 6 }}
+    {{- end }}
   selector:
     matchLabels:
       {{- include "helm-chart.selectorLabels" . | nindent 6 }}

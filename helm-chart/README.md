@@ -17,6 +17,11 @@ For token mode, supply a non-blank `UI_ACCESS_TOKEN` through
 
 ## Configuration
 
+The Deployment defaults to `strategy.type: Recreate` so existing pods stop
+before replacements open the SQLite database. Expect a brief interruption
+during an update. Set `strategy.type: RollingUpdate` and optionally
+`strategy.rollingUpdate` to override the strategy.
+
 ### Environment Variables (`.envs`)
 
 Values under `envs` are injected via a ConfigMap. Keys are exact environment variable names.
